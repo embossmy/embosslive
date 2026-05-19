@@ -1238,7 +1238,7 @@ function PositionPreview({
   );
 }
 
-export function isVideoUrl(url: string | null | undefined): boolean {
+function isVideoUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   return /\.(mp4|webm|ogg|ogv|mov|m4v)(\?|#|$)/i.test(url);
 }
