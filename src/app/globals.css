@@ -1,0 +1,186 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Great+Vibes&family=Sora:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ivory: #FBF8F3;
+  --ink: #1A1A1A;
+
+  /* ---------- Motion tokens ---------- */
+  /* impeccable signature: expo-out (cubic-bezier(0.16, 1, 0.3, 1)). Real
+     objects decelerate smoothly — no bounce, no elastic. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-linear: linear;
+
+  /* Duration scale matched to Jakub-mode (consumer polish, 200–500ms)
+     and Emil-mode (productivity, ≤300ms) per design-motion-principles. */
+  --dur-instant: 80ms;   /* high-frequency interactions: hover, focus */
+  --dur-fast: 150ms;     /* color, opacity */
+  --dur-base: 280ms;     /* transforms, lifts */
+  --dur-slow: 600ms;     /* orchestrated entrances */
+  --dur-stage: 1000ms;   /* page-level reveals */
+}
+
+html { scroll-behavior: smooth; }
+html, body { background: var(--ivory); color: var(--ink); }
+body { font-family: Sora, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+@layer components {
+  /* Buttons transition only the properties we actually animate — never `all`,
+     and never layout properties. impeccable: animate transform + opacity. */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-5 py-3 font-medium active:scale-[.97] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 focus-visible:ring-offset-1;
+    transition-property: transform, background-color, border-color, color, box-shadow;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
+  }
+  /* Primary CTA lifts on hover — small confident step up, never a bounce. */
+  .btn-primary {
+    @apply btn bg-ink text-ivory hover:bg-mocha;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -8px rgba(26, 26, 26, 0.35);
+  }
+  .btn-secondary {
+    @apply btn bg-white border border-sand text-ink hover:bg-champagne/50 hover:border-champagne;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-champagne/50; }
+  .btn-sm { @apply px-4 py-2 text-sm; }
+  .btn-xs { @apply px-3 py-1.5 text-xs; }
+
+  /* Cards: flat at rest, the "lift" comes from .elevate-on-hover when the
+     surface is meant to be interactive. impeccable rule: shadows respond to
+     state, not decoration. */
+  .card { @apply bg-white rounded-2xl shadow-card border border-sand/50; }
+  .card-flat { @apply bg-white rounded-2xl border border-sand/60; }
+
+  .input {
+    @apply w-full rounded-lg border border-sand bg-white px-4 py-3 text-base outline-none placeholder:text-mocha/40;
+    transition-property: border-color, box-shadow, background-color;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
+  }
+  .input:focus {
+    @apply border-gold;
+    /* Gold "whisper" — diffuse halo instead of a hard ring. */
+    box-shadow: 0 0 0 3px rgba(184, 147, 90, 0.18);
+  }
+  .label { @apply block text-[11px] font-semibold text-mocha mb-1.5 tracking-[0.08em] uppercase; }
+  .chip {
+    @apply px-4 py-2 rounded-lg border border-sand bg-white text-sm cursor-pointer select-none hover:border-mocha/40 hover:bg-champagne/30;
+    transition-property: transform, background-color, border-color, color, box-shadow;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
+  }
+  .chip:hover { transform: translateY(-1px); }
+  .chip-active { @apply bg-ink text-ivory border-ink shadow-sm; }
+  .colour-chip {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg border border-sand cursor-pointer select-none;
+    transition-property: transform, background-color, border-color, box-shadow;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
+  }
+  .colour-chip:hover { transform: translateY(-1px); }
+  .colour-chip-active { @apply ring-2 ring-ink ring-offset-2; }
+  .colour-swatch {
+    @apply w-7 h-7 rounded-md border border-sand/60 shadow-inner flex-shrink-0;
+  }
+  .section-divider { @apply border-t border-sand/60 my-6; }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide;
+  }
+}
+
+@layer utilities {
+  /* Lift-on-hover for any interactive surface (cards, list rows, tiles). */
+  .elevate-on-hover {
+    transition-property: transform, box-shadow, border-color;
+    transition-duration: var(--dur-base);
+    transition-timing-function: var(--ease-out);
+  }
+  .elevate-on-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 40px -16px rgba(26, 26, 26, 0.18);
+  }
+
+  /* Constrain prose to a comfortable reading measure (impeccable: 65–75ch). */
+  .prose-cap { max-width: 70ch; }
+
+  /* Micro-animations — all use the impeccable expo-out ease. */
+  .animate-fade-in { animation: fadeIn var(--dur-base) var(--ease-out); }
+  .animate-fade-up { animation: fadeUp var(--dur-base) var(--ease-out); }
+  .animate-scale-in { animation: scaleIn var(--dur-fast) var(--ease-out); }
+  .animate-slide-in { animation: slideIn var(--dur-fast) var(--ease-out); }
+  .animate-pulse-soft { animation: pulseSoft 2s ease-in-out infinite; }
+
+  /* Row highlight animation for status changes */
+  .animate-highlight { animation: highlight 0.6s var(--ease-out); }
+
+  /* Orchestrated entrance for first-impression screens (Jakub mode). */
+  .entrance-stage > * { animation: fadeUp var(--dur-stage) var(--ease-out) backwards; }
+  .entrance-stage > *:nth-child(1) { animation-delay: 80ms; }
+  .entrance-stage > *:nth-child(2) { animation-delay: 220ms; }
+  .entrance-stage > *:nth-child(3) { animation-delay: 360ms; }
+  .entrance-stage > *:nth-child(4) { animation-delay: 500ms; }
+  .entrance-stage > *:nth-child(5) { animation-delay: 640ms; }
+  .entrance-stage > *:nth-child(6) { animation-delay: 780ms; }
+
+  /* Stagger children animations */
+  .stagger-children > * { animation: fadeUp var(--dur-base) var(--ease-out) backwards; }
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+  .stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+}
+
+/* ---------- Accessibility ----------
+   design-motion-principles: every animation must respect prefers-reduced-motion.
+   impeccable: same rule. We strip every non-essential transition + animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulseSoft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes highlight {
+  0% { background-color: rgba(184, 147, 90, 0.3); }
+  100% { background-color: transparent; }
+}
