@@ -80,6 +80,19 @@ export interface EventTemplate {
   minutes_per_order: number | null;
   auto_reset_enabled: boolean | null;
   auto_reset_seconds: number | null;
+  // Door-gift dropoff step (optional)
+  gift_required: boolean | null;
+  gift_items: string[] | null;
+  // Second engraving text (optional)
+  name2_enabled: boolean | null;
+  name2_label: string | null;
+  preview_name2_x: number | null;
+  preview_name2_y: number | null;
+  preview_name2_size: number | null;
+  preview_name2_colour: string | null;
+  preview_name2_rotation: number | null;
+  preview_name2_tilt_x: number | null;
+  preview_name2_tilt_y: number | null;
 }
 
 export interface Order {
@@ -87,6 +100,10 @@ export interface Order {
   event_id: string;
   queue_number: string;
   guest_name: string;
+  guest_name2: string | null;
+  gift_received: boolean | null;
+  gift_items_selected: string[] | null;
+  gift_items_received: string[] | null;
   selected_font: string | null;
   selected_colour: string | null;
   status: OrderStatus;

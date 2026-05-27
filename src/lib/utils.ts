@@ -415,6 +415,7 @@ export interface ParsedColour {
   hex: string; // CSS-valid colour string
   isLight: boolean;
   imageUrl: string | null; // optional product image for this colour
+  stock: number | null; // optional stock cap; null = unlimited
 }
 
 // Accepts:
@@ -422,8 +423,20 @@ export interface ParsedColour {
 //   "Walnut:#5D4037"                  → explicit hex
 //   "Walnut:#5D4037@https://img.jpg"  → with product image
 //   "Walnut@https://img.jpg"          → library hex + image
+//   ...||50                           → trailing stock cap (unlimited if absent)
 export function parseColour(input: string): ParsedColour {
-  const raw = input.trim();
+  let raw = input.trim();
+  // Strip optional trailing stock marker "||N"
+  let stock: number | null = null;
+  const stockIdx = raw.lastIndexOf("||");
+  if (stockIdx >= 0) {
+    const tail = raw.slice(stockIdx + 2).trim();
+    const n = Number(tail);
+    if (Number.isFinite(n) && n >= 0) {
+      stock = Math.floor(n);
+      raw = raw.slice(0, stockIdx).trim();
+    }
+  }
   // Split off optional image after "@"
   const atIdx = raw.indexOf("@");
   const head = atIdx >= 0 ? raw.slice(0, atIdx).trim() : raw;
@@ -439,15 +452,21 @@ export function parseColour(input: string): ParsedColour {
     const key = head.toLowerCase();
     hex = COLOUR_LIBRARY[key] ?? "#D9D2C6";
   }
-  return { name, hex, isLight: isLightColour(hex), imageUrl };
+  return { name, hex, isLight: isLightColour(hex), imageUrl, stock };
 }
 
 // Re-encode parts back into the storage string format.
-export function encodeColour(name: string, hex: string, imageUrl?: string | null): string {
+export function encodeColour(
+  name: string,
+  hex: string,
+  imageUrl?: string | null,
+  stock?: number | null
+): string {
   let out = name.trim();
   const cleanHex = (hex || "").trim();
   if (cleanHex) out += `:${cleanHex.startsWith("#") ? cleanHex : `#${cleanHex}`}`;
   if (imageUrl && imageUrl.trim()) out += `@${imageUrl.trim()}`;
+  if (stock != null && Number.isFinite(stock) && stock >= 0) out += `||${Math.floor(stock)}`;
   return out;
 }
 

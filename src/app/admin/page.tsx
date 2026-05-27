@@ -224,6 +224,73 @@ export default function AdminDashboard() {
     await logActivity(o, action, newStatus);
   }
 
+  async function markGiftReceived(o: Order) {
+    // For single-item / no-list orders, just flip the overall flag and
+    // mark every selected item (if any) as received.
+    const allItems = o.gift_items_selected ?? [];
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        gift_received: true,
+        gift_items_received: allItems,
+      })
+      .eq("id", o.id);
+    if (error) {
+      flash(`Error: ${error.message}`);
+      return;
+    }
+    await logActivity(o, "gift_received");
+    flash(`Gift received from “${o.guest_name}”`);
+  }
+
+  // Undo a misclick: flip the gift back to "pending dropoff".
+  async function unmarkGiftReceived(o: Order) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ gift_received: false, gift_items_received: [] })
+      .eq("id", o.id);
+    if (error) {
+      flash(`Error: ${error.message}`);
+      return;
+    }
+    await logActivity(o, "gift_received_undone");
+    flash(`Gift mark undone for “${o.guest_name}”`);
+  }
+
+  // Per-item toggle for orders with multiple selected gift items.
+  // The overall gift_received flag is kept in sync: true only when every
+  // selected item has been received.
+  async function toggleGiftItemReceived(o: Order, item: string) {
+    const selected = o.gift_items_selected ?? [];
+    const received = o.gift_items_received ?? [];
+    const isReceived = received.includes(item);
+    const nextReceived = isReceived
+      ? received.filter((x) => x !== item)
+      : [...received, item];
+    const allReceived =
+      selected.length > 0 && selected.every((s) => nextReceived.includes(s));
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        gift_items_received: nextReceived,
+        gift_received: allReceived,
+      })
+      .eq("id", o.id);
+    if (error) {
+      flash(`Error: ${error.message}`);
+      return;
+    }
+    await logActivity(
+      o,
+      isReceived ? `gift_item_undone:${item}` : `gift_item_received:${item}`
+    );
+    flash(
+      isReceived
+        ? `Undone “${item}” for ${o.guest_name}`
+        : `Received “${item}” from ${o.guest_name}`
+    );
+  }
+
   async function copyName(o: Order) {
     try {
       await navigator.clipboard.writeText(o.guest_name);
@@ -236,6 +303,12 @@ export default function AdminDashboard() {
 
   // Start = copy guest name to clipboard AND move order to "engraving".
   async function startEngraving(o: Order) {
+    if (template?.gift_required && o.gift_received !== true) {
+      const ok = confirm(
+        `Gift not yet marked as received from "${o.guest_name}". Start engraving anyway?`
+      );
+      if (!ok) return;
+    }
     try {
       await navigator.clipboard.writeText(o.guest_name);
       flash(`Copied “${o.guest_name}” · started`);
@@ -361,6 +434,9 @@ export default function AdminDashboard() {
               <th className="px-4 py-3 font-semibold">Font</th>
               <th className="px-4 py-3 font-semibold">Colour</th>
               <th className="px-4 py-3 font-semibold">Status</th>
+              {template?.gift_required && (
+                <th className="px-4 py-3 font-semibold" title="Door gift dropoff">Gift</th>
+              )}
               <th className="px-4 py-3 font-semibold">Created</th>
               <th className="px-4 py-3 font-semibold">Notes</th>
               <th className="px-4 py-3 text-right font-semibold">Actions</th>
@@ -369,7 +445,7 @@ export default function AdminDashboard() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-16 text-mocha">
+                <td colSpan={template?.gift_required ? 9 : 8} className="text-center py-16 text-mocha">
                   <p className="font-serif text-xl mb-1">No orders</p>
                   <p className="text-sm text-mocha/60">Matching orders will appear here.</p>
                 </td>
@@ -378,7 +454,14 @@ export default function AdminDashboard() {
             {filtered.map((o) => (
               <tr key={o.id} className={`border-t border-sand/30 hover:bg-champagne/10 transition-colors duration-100 ${highlightedRow === o.id ? 'animate-highlight' : ''}`}>
                 <td className="px-4 py-3 font-serif text-xl tabular-nums">{o.queue_number}</td>
-                <td className="px-4 py-3 font-semibold text-ink">{o.guest_name}</td>
+                <td className="px-4 py-3 text-ink">
+                  <div className="font-semibold">{o.guest_name}</div>
+                  {o.guest_name2 && (
+                    <div className="text-xs text-mocha mt-0.5">
+                      <span className="text-mocha/50 mr-1">+</span>{o.guest_name2}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   {o.selected_font ? (
                     <span
@@ -402,6 +485,16 @@ export default function AdminDashboard() {
                     {STATUS_LABEL[o.status as OrderStatus]}
                   </span>
                 </td>
+                {template?.gift_required && (
+                  <td className="px-4 py-3">
+                    <GiftCell
+                      order={o}
+                      onMarkAll={markGiftReceived}
+                      onUnmarkAll={unmarkGiftReceived}
+                      onToggleItem={toggleGiftItemReceived}
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-3 text-xs text-mocha tabular-nums">{formatTime(o.created_at)}</td>
                 <td className="px-4 py-3 max-w-[180px] truncate text-xs text-mocha" title={o.notes ?? ""}>
                   {o.notes ?? ""}
@@ -544,6 +637,95 @@ function appendNote(existing: string | null, line: string) {
   const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const entry = `[${ts}] ${line}`;
   return existing ? `${existing}\n${entry}` : entry;
+}
+
+function GiftCell({
+  order,
+  onMarkAll,
+  onUnmarkAll,
+  onToggleItem,
+}: {
+  order: Order;
+  onMarkAll: (o: Order) => void;
+  onUnmarkAll: (o: Order) => void;
+  onToggleItem: (o: Order, item: string) => void;
+}) {
+  const selected = order.gift_items_selected ?? [];
+  const received = order.gift_items_received ?? [];
+
+  // Single-item / no-list orders: keep the simple Pending ↔ Received toggle.
+  if (selected.length < 2) {
+    const itemLabel = selected[0] ?? null;
+    return (
+      <div className="flex flex-col items-start gap-1">
+        {order.gift_received === true ? (
+          <button
+            className="badge bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer transition-colors"
+            onClick={() => {
+              if (
+                confirm(
+                  `Undo gift received for "${order.guest_name}"? This sets it back to pending.`
+                )
+              ) {
+                onUnmarkAll(order);
+              }
+            }}
+            title="Click to undo (in case of misclick)"
+          >
+            ✓ Received{itemLabel ? `: ${itemLabel}` : ""}
+          </button>
+        ) : (
+          <button
+            className="btn btn-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+            onClick={() => onMarkAll(order)}
+            title="Mark gift as received from guest"
+          >
+            {itemLabel
+              ? `Pending: ${itemLabel} → Mark received`
+              : "Pending → Mark received"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Multi-item: one toggle per gift item.
+  return (
+    <div className="flex flex-col items-start gap-1 min-w-[10rem]">
+      {selected.map((item) => {
+        const isReceived = received.includes(item);
+        return (
+          <button
+            key={item}
+            onClick={() => {
+              if (isReceived) {
+                if (
+                  !confirm(
+                    `Undo "${item}" received for ${order.guest_name}? This sets it back to pending.`
+                  )
+                )
+                  return;
+              }
+              onToggleItem(order, item);
+            }}
+            className={`btn btn-xs w-full justify-start text-left transition-colors ${
+              isReceived
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+            }`}
+            title={
+              isReceived
+                ? "Click to undo (in case of misclick)"
+                : "Click to mark this item as received"
+            }
+          >
+            <span className="mr-1">{isReceived ? "✓" : "○"}</span>
+            <span className="truncate">{item}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 interface ActionButtonProps {

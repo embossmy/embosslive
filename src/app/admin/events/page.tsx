@@ -51,6 +51,19 @@ interface FormState {
   auto_reset_enabled: boolean;
   auto_reset_seconds: number;
   status: "active" | "inactive";
+  // Door-gift dropoff step
+  gift_required: boolean;
+  gift_items: string; // comma-separated list, e.g. "Luggage tag, Passport holder"
+  // Second engraving text
+  name2_enabled: boolean;
+  name2_label: string;
+  preview_name2_x: number;
+  preview_name2_y: number;
+  preview_name2_size: number;
+  preview_name2_colour: string;
+  preview_name2_rotation: number;
+  preview_name2_tilt_x: number;
+  preview_name2_tilt_y: number;
 }
 
 const empty: FormState = {
@@ -89,6 +102,17 @@ const empty: FormState = {
   auto_reset_enabled: false,
   auto_reset_seconds: 30,
   status: "active",
+  gift_required: false,
+  gift_items: "",
+  name2_enabled: false,
+  name2_label: "Second line",
+  preview_name2_x: 50,
+  preview_name2_y: 70,
+  preview_name2_size: 28,
+  preview_name2_colour: "#3B2A1A",
+  preview_name2_rotation: 0,
+  preview_name2_tilt_x: 0,
+  preview_name2_tilt_y: 0,
 };
 
 export default function EventsAdminPage() {
@@ -261,6 +285,17 @@ export default function EventsAdminPage() {
       auto_reset_enabled: Boolean(t?.auto_reset_enabled ?? false),
       auto_reset_seconds: Number(t?.auto_reset_seconds ?? 30),
       status: (ev.status as "active" | "inactive") ?? "active",
+      gift_required: Boolean(t?.gift_required ?? false),
+      gift_items: Array.isArray(t?.gift_items) ? (t.gift_items as string[]).join(", ") : "",
+      name2_enabled: Boolean(t?.name2_enabled ?? false),
+      name2_label: t?.name2_label ?? "Second line",
+      preview_name2_x: Number(t?.preview_name2_x ?? 50),
+      preview_name2_y: Number(t?.preview_name2_y ?? 70),
+      preview_name2_size: Number(t?.preview_name2_size ?? 28),
+      preview_name2_colour: t?.preview_name2_colour ?? "#3B2A1A",
+      preview_name2_rotation: Number(t?.preview_name2_rotation ?? 0),
+      preview_name2_tilt_x: Number(t?.preview_name2_tilt_x ?? 0),
+      preview_name2_tilt_y: Number(t?.preview_name2_tilt_y ?? 0),
     };
     isApplyingRef.current = true;
     setForm(next);
@@ -336,6 +371,17 @@ export default function EventsAdminPage() {
         minutes_per_order: form.minutes_per_order,
         auto_reset_enabled: form.auto_reset_enabled,
         auto_reset_seconds: form.auto_reset_seconds,
+        gift_required: form.gift_required,
+        gift_items: splitList(form.gift_items),
+        name2_enabled: form.name2_enabled,
+        name2_label: form.name2_label || "Second line",
+        preview_name2_x: form.preview_name2_x,
+        preview_name2_y: form.preview_name2_y,
+        preview_name2_size: form.preview_name2_size,
+        preview_name2_colour: form.preview_name2_colour,
+        preview_name2_rotation: form.preview_name2_rotation,
+        preview_name2_tilt_x: form.preview_name2_tilt_x,
+        preview_name2_tilt_y: form.preview_name2_tilt_y,
       };
 
       if (evId && templates[evId]) {
@@ -538,6 +584,49 @@ export default function EventsAdminPage() {
                     <option value="inactive">Inactive</option>
                   </select>
                 </Field>
+                <Field label="Door-gift dropoff step" full>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={form.gift_required}
+                      onChange={(e) =>
+                        setForm({ ...form, gift_required: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <strong>Require door-gift dropoff step.</strong>
+                      <br />
+                      <span className="text-xs text-mocha">
+                        When enabled, after the guest taps Start they see a
+                        screen reminding them to drop off their door gift
+                        with our crew after personalizing. The order is
+                        created with a &quot;pending dropoff&quot; flag and
+                        the crew marks it as received from the dashboard
+                        before engraving.
+                      </span>
+                    </span>
+                  </label>
+                </Field>
+                {form.gift_required && (
+                  <Field label="Gift items (one per line or comma-separated)" full>
+                    <textarea
+                      className="input min-h-[80px] font-sans"
+                      placeholder="e.g. Luggage tag, Passport holder"
+                      value={form.gift_items}
+                      onChange={(e) =>
+                        setForm({ ...form, gift_items: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-mocha mt-2">
+                      Optional. List the gift items guests can bring to be
+                      engraved. If you list <strong>2 or more</strong>, the
+                      guest will see checkboxes on the gift step and can pick
+                      which one(s) they want engraved. Leave blank or list
+                      only one item to skip the picker.
+                    </p>
+                  </Field>
+                )}
                 <Field label="Crew password (per-event)" full>
                   <input
                     className="input"
@@ -637,6 +726,22 @@ export default function EventsAdminPage() {
                         preview_name_y: Math.round(ny),
                       }))
                     }
+                    secondary={
+                      form.name2_enabled
+                        ? {
+                            text: "Sarah",
+                            x: form.preview_name2_x,
+                            y: form.preview_name2_y,
+                            size: form.preview_name2_size,
+                            colour: form.preview_name2_colour,
+                            rotation: form.preview_name2_rotation,
+                            tiltX: form.preview_name2_tilt_x,
+                            tiltY: form.preview_name2_tilt_y,
+                            fontOption:
+                              splitList(form.available_fonts)[0] || "Modern",
+                          }
+                        : null
+                    }
                   />
                   <div className="grid grid-cols-3 gap-3 mt-3">
                     <SliderField
@@ -734,6 +839,170 @@ export default function EventsAdminPage() {
               </div>
             </Section>
 
+            {/* ============ 3b. SECOND PLACEMENT OF NAME (optional) ============ */}
+            <Section
+              title="Second placement of the name (optional)"
+              subtitle="Engrave the same name at a second spot on the product"
+              defaultOpen={form.name2_enabled}
+            >
+              <div className="space-y-4">
+                <Field label="Enable second placement" full>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={form.name2_enabled}
+                      onChange={(e) =>
+                        setForm({ ...form, name2_enabled: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <strong>
+                        Render the guest's name at a second position on the product.
+                      </strong>
+                      <br />
+                      <span className="text-xs text-mocha">
+                        Useful when the same name should appear on two spots
+                        (e.g. front and back of a luggage tag). Set the
+                        position, size, colour, rotation, and tilt for the
+                        second spot independently. The guest only enters their
+                        name once — it's rendered in both places.
+                      </span>
+                    </span>
+                  </label>
+                </Field>
+
+                {form.name2_enabled && (
+                  <>
+                    <Field
+                      label="Second placement position & size — click on the preview to set X/Y"
+                      full
+                    >
+                      <PositionPreview
+                        imageUrl={form.product_image_url}
+                        fontOption={
+                          splitList(form.available_fonts)[0] || "Modern"
+                        }
+                        allFonts={splitList(form.available_fonts)}
+                        colour={form.preview_name2_colour}
+                        x={form.preview_name2_x}
+                        y={form.preview_name2_y}
+                        size={form.preview_name2_size}
+                        rotation={form.preview_name2_rotation}
+                        tiltX={form.preview_name2_tilt_x}
+                        tiltY={form.preview_name2_tilt_y}
+                        sample="Sarah"
+                        onChangeXY={(nx, ny) =>
+                          setForm((f) => ({
+                            ...f,
+                            preview_name2_x: Math.round(nx),
+                            preview_name2_y: Math.round(ny),
+                          }))
+                        }
+                        secondary={{
+                          text: "Sarah",
+                          x: form.preview_name_x,
+                          y: form.preview_name_y,
+                          size: form.preview_name_size,
+                          colour: form.preview_name_colour,
+                          rotation: form.preview_name_rotation,
+                          tiltX: form.preview_name_tilt_x,
+                          tiltY: form.preview_name_tilt_y,
+                          fontOption:
+                            splitList(form.available_fonts)[0] || "Modern",
+                        }}
+                      />
+                      <div className="grid grid-cols-3 gap-3 mt-3">
+                        <SliderField
+                          label={`X: ${form.preview_name2_x}%`}
+                          min={0}
+                          max={100}
+                          value={form.preview_name2_x}
+                          onChange={(v) =>
+                            setForm({ ...form, preview_name2_x: v })
+                          }
+                        />
+                        <SliderField
+                          label={`Y: ${form.preview_name2_y}%`}
+                          min={0}
+                          max={100}
+                          value={form.preview_name2_y}
+                          onChange={(v) =>
+                            setForm({ ...form, preview_name2_y: v })
+                          }
+                        />
+                        <SliderField
+                          label={`Size: ${form.preview_name2_size}px`}
+                          min={10}
+                          max={120}
+                          value={form.preview_name2_size}
+                          onChange={(v) =>
+                            setForm({ ...form, preview_name2_size: v })
+                          }
+                        />
+                        <SliderField
+                          label={`Rotate: ${form.preview_name2_rotation}°`}
+                          min={-180}
+                          max={180}
+                          value={form.preview_name2_rotation}
+                          onChange={(v) =>
+                            setForm({ ...form, preview_name2_rotation: v })
+                          }
+                        />
+                        <SliderField
+                          label={`Tilt L/R: ${form.preview_name2_tilt_x}°`}
+                          min={-60}
+                          max={60}
+                          value={form.preview_name2_tilt_x}
+                          onChange={(v) =>
+                            setForm({ ...form, preview_name2_tilt_x: v })
+                          }
+                        />
+                        <SliderField
+                          label={`Tilt T/B: ${form.preview_name2_tilt_y}°`}
+                          min={-60}
+                          max={60}
+                          value={form.preview_name2_tilt_y}
+                          onChange={(v) =>
+                            setForm({ ...form, preview_name2_tilt_y: v })
+                          }
+                        />
+                      </div>
+                      <div className="flex justify-end mt-2">
+                        <button
+                          type="button"
+                          className="btn-ghost text-xs"
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              preview_name2_rotation: 0,
+                              preview_name2_tilt_x: 0,
+                              preview_name2_tilt_y: 0,
+                            }))
+                          }
+                        >
+                          Reset rotation & tilt
+                        </button>
+                      </div>
+                    </Field>
+                    <Field label="Second text colour">
+                      <input
+                        type="color"
+                        className="input h-12"
+                        value={form.preview_name2_colour}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            preview_name2_colour: e.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                  </>
+                )}
+              </div>
+            </Section>
+
             {/* ============ 4. GUEST CHOICES ============ */}
             <Section
               title="Guest choices"
@@ -751,6 +1020,11 @@ export default function EventsAdminPage() {
                     upload a product image for that colour — the guest's preview
                     will swap to that image when they select it. Leave the colours
                     list empty if your event has no colour options.
+                    <br />
+                    Set <strong>Stock</strong> to a number to cap how many guests
+                    can pick that colour. Once stock runs out, the colour is
+                    automatically disabled on the guest screen. Leave blank for
+                    unlimited.
                   </p>
                 </Field>
                 <Field label="Available fonts" full>
@@ -1133,6 +1407,8 @@ function PositionPreview({
   tiltX,
   tiltY,
   onChangeXY,
+  sample = "Sarah",
+  secondary,
 }: {
   imageUrl: string;
   fontOption: string;
@@ -1145,8 +1421,21 @@ function PositionPreview({
   tiltX: number;
   tiltY: number;
   onChangeXY: (x: number, y: number) => void;
+  sample?: string;
+  // Read-only second overlay rendered behind the draggable text
+  // (used in the second-text-box section so both placements are visible).
+  secondary?: {
+    text: string;
+    x: number;
+    y: number;
+    size: number;
+    colour: string;
+    rotation: number;
+    tiltX: number;
+    tiltY: number;
+    fontOption: string;
+  } | null;
 }) {
-  const sample = "Sarah";
 
   const drag = useDragPercent({
     x,
@@ -1189,6 +1478,28 @@ function PositionPreview({
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-mocha text-sm">
             Upload a product image to preview
+          </div>
+        )}
+        {/* Read-only secondary overlay (e.g. the other engraving line) */}
+        {secondary && (
+          <div
+            className={`absolute ${fontClassFor(secondary.fontOption)} pointer-events-none whitespace-nowrap`}
+            style={{
+              left: `${secondary.x}%`,
+              top: `${secondary.y}%`,
+              transform: nameTransform(
+                secondary.rotation,
+                secondary.tiltX,
+                secondary.tiltY
+              ),
+              transformStyle: "preserve-3d",
+              fontSize: `${secondary.size}px`,
+              color: secondary.colour,
+              opacity: 0.65,
+              ...fontStyleFor(secondary.fontOption),
+            }}
+          >
+            {secondary.text}
           </div>
         )}
         {/* Crosshair guides at the current (committed) position */}
@@ -1348,38 +1659,36 @@ function ColoursEditor({
 }) {
   const items = splitList(value).map(parseColour);
 
-  function update(idx: number, next: { name: string; hex: string; imageUrl: string | null }) {
-    const newItems = items.map((it, i) =>
-      i === idx
-        ? { name: next.name, hex: next.hex, imageUrl: next.imageUrl }
-        : { name: it.name, hex: it.hex, imageUrl: it.imageUrl }
-    );
+  type ColourRow = { name: string; hex: string; imageUrl: string | null; stock: number | null };
+
+  function emit(rows: ColourRow[]) {
     onChange(
-      newItems
-        .map((it) => encodeColour(it.name, it.hex, it.imageUrl))
+      rows
+        .map((it) => encodeColour(it.name, it.hex, it.imageUrl, it.stock))
         .join(", ")
     );
+  }
+
+  function update(idx: number, next: ColourRow) {
+    const newItems: ColourRow[] = items.map((it, i) =>
+      i === idx ? next : { name: it.name, hex: it.hex, imageUrl: it.imageUrl, stock: it.stock }
+    );
+    emit(newItems);
   }
 
   function remove(idx: number) {
-    const newItems = items.filter((_, i) => i !== idx);
-    onChange(
-      newItems
-        .map((it) => encodeColour(it.name, it.hex, it.imageUrl))
-        .join(", ")
-    );
+    const newItems: ColourRow[] = items
+      .filter((_, i) => i !== idx)
+      .map((it) => ({ name: it.name, hex: it.hex, imageUrl: it.imageUrl, stock: it.stock }));
+    emit(newItems);
   }
 
   function add() {
-    const newItems = [
-      ...items.map((it) => ({ name: it.name, hex: it.hex, imageUrl: it.imageUrl })),
-      { name: "New colour", hex: "#C19A6B", imageUrl: null as string | null },
+    const newItems: ColourRow[] = [
+      ...items.map((it) => ({ name: it.name, hex: it.hex, imageUrl: it.imageUrl, stock: it.stock })),
+      { name: "New colour", hex: "#C19A6B", imageUrl: null, stock: null },
     ];
-    onChange(
-      newItems
-        .map((it) => encodeColour(it.name, it.hex, it.imageUrl))
-        .join(", ")
-    );
+    emit(newItems);
   }
 
   return (
@@ -1404,7 +1713,7 @@ function ColoursEditor({
               placeholder="Name (e.g. Walnut)"
               value={it.name}
               onChange={(e) =>
-                update(idx, { name: e.target.value, hex: it.hex, imageUrl: it.imageUrl })
+                update(idx, { name: e.target.value, hex: it.hex, imageUrl: it.imageUrl, stock: it.stock })
               }
             />
             <input
@@ -1412,9 +1721,32 @@ function ColoursEditor({
               className="input !p-0 !h-9 !w-12"
               value={it.hex}
               onChange={(e) =>
-                update(idx, { name: it.name, hex: e.target.value, imageUrl: it.imageUrl })
+                update(idx, { name: it.name, hex: e.target.value, imageUrl: it.imageUrl, stock: it.stock })
               }
             />
+            <label
+              className="text-[11px] text-mocha flex items-center gap-1"
+              title="Stock count for this colour. Leave blank for unlimited. Guests can no longer pick this colour once stock is reached."
+            >
+              <span>Stock</span>
+              <input
+                className="input !py-1.5 !px-2 w-20"
+                type="number"
+                min={0}
+                placeholder="∞"
+                value={it.stock ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const next = v === "" ? null : Math.max(0, Math.floor(Number(v)));
+                  update(idx, {
+                    name: it.name,
+                    hex: it.hex,
+                    imageUrl: it.imageUrl,
+                    stock: Number.isFinite(next as number) ? (next as number | null) : null,
+                  });
+                }}
+              />
+            </label>
             <button
               type="button"
               className="btn-ghost !py-1 !px-3 text-xs"
@@ -1430,7 +1762,7 @@ function ColoursEditor({
             <ImageField
               value={it.imageUrl ?? ""}
               onChange={(v) =>
-                update(idx, { name: it.name, hex: it.hex, imageUrl: v || null })
+                update(idx, { name: it.name, hex: it.hex, imageUrl: v || null, stock: it.stock })
               }
               onError={onError}
               pathPrefix={`colour/${it.name.toLowerCase().replace(/\s+/g, "-") || "x"}`}

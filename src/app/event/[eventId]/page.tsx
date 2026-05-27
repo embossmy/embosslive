@@ -42,6 +42,15 @@ export default function GuestEventPage() {
   const [submitted, setSubmitted] = useState<Order | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  // Gift dropoff step: null = not yet answered, true = guest has gift,
+  // false = guest will hand gift to crew. Only used when tpl.gift_required.
+  const [giftAnswer, setGiftAnswer] = useState<boolean | null>(null);
+  // Gift items the guest has chosen to have engraved (subset of
+  // tpl.gift_items). Only relevant when the event has 2+ gift items.
+  const [giftItemsSelected, setGiftItemsSelected] = useState<string[]>([]);
+  // Live tally of orders per colour name (status != cancelled), used to disable
+  // colours that have hit their stock cap.
+  const [colourUsage, setColourUsage] = useState<Record<string, number>>({});
 
   useEffect(() => {
     (async () => {
@@ -79,11 +88,83 @@ export default function GuestEventPage() {
   const fonts = (tpl?.available_fonts as string[] | null) ?? DEFAULT_FONTS;
   const colours = (tpl?.available_colours as string[] | null) ?? [];
   const maxLen = tpl?.max_name_length ?? 20;
+  // When enabled, the same engraving name is rendered at a second position
+  // on the product (e.g. front + back, or two slots on a luggage tag) using
+  // the preview_name2_* placement/style fields.
+  const name2Enabled = !!tpl?.name2_enabled;
+  const giftItems = (tpl?.gift_items as string[] | null) ?? [];
+  const hasMultipleGifts = giftItems.length >= 2;
+
+  // When the gift step first opens, default to all items selected.
+  useEffect(() => {
+    if (hasMultipleGifts && giftItemsSelected.length === 0) {
+      setGiftItemsSelected(giftItems);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tpl?.id, hasMultipleGifts]);
+
+  // Live count of how many orders have selected each colour. Drives the
+  // “out of stock” state so guests can’t pick a colour past its cap.
+  useEffect(() => {
+    if (!eventId) return;
+    let alive = true;
+    async function refresh() {
+      const { data } = await supabase
+        .from("orders")
+        .select("selected_colour,status")
+        .eq("event_id", eventId)
+        .neq("status", "cancelled");
+      if (!alive) return;
+      const map: Record<string, number> = {};
+      for (const row of (data as { selected_colour: string | null }[]) ?? []) {
+        if (!row.selected_colour) continue;
+        const key = parseColour(row.selected_colour).name;
+        map[key] = (map[key] ?? 0) + 1;
+      }
+      setColourUsage(map);
+    }
+    refresh();
+    const channel = supabase
+      .channel(`event-stock-${eventId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders", filter: `event_id=eq.${eventId}` },
+        () => refresh()
+      )
+      .subscribe();
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, [eventId]);
+
+  function remainingForColour(c: string): number | null {
+    const p = parseColour(c);
+    if (p.stock == null) return null;
+    const used = colourUsage[p.name] ?? 0;
+    return Math.max(0, p.stock - used);
+  }
+
+  // If the currently-selected colour just went out of stock, switch to the
+  // first available one (or clear it).
+  useEffect(() => {
+    if (!colour) return;
+    const remaining = remainingForColour(colour);
+    if (remaining !== null && remaining <= 0) {
+      const firstAvail = colours.find((c) => {
+        const r = remainingForColour(c);
+        return r === null || r > 0;
+      });
+      setColour(firstAvail ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colourUsage]);
 
   const cleanName = useMemo(() => sanitizeName(name), [name]);
   const tooLong = cleanName.length > maxLen;
   const containsEmoji = hasEmoji(name);
-  const canSubmit = cleanName.length > 0 && !tooLong && !containsEmoji && !submitting;
+  const canSubmit =
+    cleanName.length > 0 && !tooLong && !containsEmoji && !submitting;
 
   async function submit() {
     setSubmitting(true);
@@ -95,15 +176,38 @@ export default function GuestEventPage() {
         .eq("event_id", eventId);
       const queue = nextQueueNumber(count ?? 0);
 
+      const giftRequired = !!tpl?.gift_required;
+      const giftReceivedValue: boolean | null = giftRequired
+        ? giftAnswer === true
+        : null;
+      // Persist the gift item(s) the order is for. For multi-gift events
+      // this is the guest's chosen subset; for single-gift events we
+      // record the lone item so the crew dashboard can show its name on
+      // the Pending/Received toggle. Empty when no gift items are configured.
+      const giftItemsToSave: string[] | null = hasMultipleGifts
+        ? giftItemsSelected
+        : giftItems.length === 1
+        ? [giftItems[0]]
+        : null;
+      const giftNote =
+        giftRequired && giftAnswer === false
+          ? hasMultipleGifts
+            ? `⚠️ Pending dropoff. Engrave: ${giftItemsSelected.join(", ")}`
+            : "⚠️ Gift not yet handed to crew — wait for dropoff before engraving."
+          : null;
       const { data, error } = await supabase
         .from("orders")
         .insert({
           event_id: eventId,
           queue_number: queue,
           guest_name: cleanName,
+          guest_name2: null,
           selected_font: font,
           selected_colour: colour || null,
           status: "waiting",
+          gift_received: giftReceivedValue,
+          gift_items_selected: giftItemsToSave,
+          notes: giftNote,
         })
         .select("*")
         .single();
@@ -219,6 +323,92 @@ export default function GuestEventPage() {
     );
   }
 
+  // Optional door-gift dropoff step — informational screen shown after the
+  // welcome and before the personalization form. Guests are told to drop off
+  // their door gift with the crew after personalizing. When the event has
+  // 2+ gift items, the guest also picks which one(s) to engrave here.
+  if (started && !submitted && tpl?.gift_required && giftAnswer === null) {
+    const canContinue = !hasMultipleGifts || giftItemsSelected.length > 0;
+    return (
+      <main className="min-h-screen flex flex-col p-5">
+        <div className="flex-1 flex items-center justify-center py-6">
+          <div className="card max-w-xl w-full p-8 md:p-10 text-center">
+            <p className="text-[10px] tracking-[0.5em] text-mocha uppercase mb-3">
+              {event.event_name}
+            </p>
+            <p className="text-4xl mb-2">🎁</p>
+            <h1 className="font-serif text-3xl md:text-4xl mb-3 leading-tight">
+              {hasMultipleGifts
+                ? "Which gift would you like engraved?"
+                : "Don't forget your door gift!"}
+            </h1>
+            <p className="text-mocha text-sm md:text-base mb-6 leading-relaxed">
+              {hasMultipleGifts ? (
+                <>
+                  Select the item(s) you'd like us to engrave, then drop them
+                  off with our crew <strong>after personalizing</strong>.
+                </>
+              ) : (
+                <>
+                  Please drop off your door gift with our crew{" "}
+                  <strong>after you finish personalizing</strong> so we can engrave it for you.
+                </>
+              )}
+            </p>
+
+            {hasMultipleGifts && (
+              <div className="flex flex-col gap-2 mb-6 text-left">
+                {giftItems.map((item) => {
+                  const checked = giftItemsSelected.includes(item);
+                  return (
+                    <label
+                      key={item}
+                      className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        checked
+                          ? "border-gold bg-champagne/30"
+                          : "border-sand bg-white hover:border-mocha/30"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 accent-gold"
+                        checked={checked}
+                        onChange={(e) => {
+                          setGiftItemsSelected((prev) =>
+                            e.target.checked
+                              ? [...prev, item]
+                              : prev.filter((x) => x !== item)
+                          );
+                        }}
+                      />
+                      <span className="text-base font-medium text-ink">
+                        {item}
+                      </span>
+                    </label>
+                  );
+                })}
+                {giftItemsSelected.length === 0 && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Please pick at least one gift to engrave.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <button
+              className="btn-primary w-full text-lg py-5 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => canContinue && setGiftAnswer(false)}
+              disabled={!canContinue}
+            >
+              Continue to personalize
+            </button>
+          </div>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
+
   if (submitted) {
     return (
       <ConfirmationScreen
@@ -231,6 +421,8 @@ export default function GuestEventPage() {
           setSubmitted(null);
           setQrDataUrl(null);
           setName("");
+          setGiftAnswer(null);
+          setGiftItemsSelected(hasMultipleGifts ? giftItems : []);
           setStarted(false);
         }}
       />
@@ -270,6 +462,21 @@ export default function GuestEventPage() {
             rotation={tpl?.preview_name_rotation ?? 0}
             tiltX={tpl?.preview_name_tilt_x ?? 0}
             tiltY={tpl?.preview_name_tilt_y ?? 0}
+            secondary={
+              name2Enabled
+                ? {
+                    text: cleanName || "Your Name",
+                    x: Number(tpl?.preview_name2_x ?? 50),
+                    y: Number(tpl?.preview_name2_y ?? 70),
+                    size: Number(tpl?.preview_name2_size ?? 28),
+                    colour: tpl?.preview_name2_colour ?? "#3B2A1A",
+                    rotation: Number(tpl?.preview_name2_rotation ?? 0),
+                    tiltX: Number(tpl?.preview_name2_tilt_x ?? 0),
+                    tiltY: Number(tpl?.preview_name2_tilt_y ?? 0),
+                    placeholder: !cleanName,
+                  }
+                : null
+            }
           />
           {event.product_name && (
             <p className="text-center text-sm font-medium text-mocha mt-3">
@@ -372,20 +579,27 @@ export default function GuestEventPage() {
                   const parsed = parseColour(c);
                   const active = colour === c;
                   const textColor = parsed.isLight ? "#1A1A1A" : "#FBF8F3";
+                  const remaining = remainingForColour(c);
+                  const outOfStock = remaining !== null && remaining <= 0;
                   return (
                     <button
                       key={c}
-                      onClick={() => setColour(c)}
-                      className="relative flex items-center justify-center rounded-xl px-4 py-4 transition-all duration-150 select-none"
+                      disabled={outOfStock}
+                      onClick={() => !outOfStock && setColour(c)}
+                      className={`relative flex items-center justify-center rounded-xl px-4 py-4 transition-all duration-150 select-none ${
+                        outOfStock ? "cursor-not-allowed" : ""
+                      }`}
                       style={{
                         backgroundColor: parsed.hex,
                         color: textColor,
                         boxShadow: active
                           ? `0 0 0 3px ${parsed.hex}, 0 0 0 5px #1A1A1A`
                           : "0 1px 3px rgba(0,0,0,0.12)",
+                        opacity: outOfStock ? 0.4 : 1,
+                        filter: outOfStock ? "grayscale(0.4)" : undefined,
                       }}
                     >
-                      {active && (
+                      {active && !outOfStock && (
                         <span
                           className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
                           style={{ backgroundColor: textColor }}
@@ -395,8 +609,16 @@ export default function GuestEventPage() {
                           </svg>
                         </span>
                       )}
-                      <span className="text-sm font-semibold tracking-wide">
-                        {parsed.name}
+                      <span className="text-sm font-semibold tracking-wide flex flex-col items-center">
+                        <span>{parsed.name}</span>
+                        {outOfStock && (
+                          <span
+                            className="text-[10px] font-bold uppercase tracking-widest mt-0.5"
+                            style={{ color: textColor }}
+                          >
+                            Out of stock
+                          </span>
+                        )}
                       </span>
                     </button>
                   );
@@ -473,6 +695,7 @@ function PreviewCanvas({
   rotation,
   tiltX,
   tiltY,
+  secondary,
 }: {
   imageUrl: string | null;
   name: string;
@@ -484,6 +707,18 @@ function PreviewCanvas({
   rotation: number;
   tiltX: number;
   tiltY: number;
+  secondary?: {
+    text: string;
+    x: number;
+    y: number;
+    size: number;
+    colour: string;
+    rotation: number;
+    tiltX: number;
+    tiltY: number;
+    // When true, render at lower opacity to indicate it's a placeholder.
+    placeholder?: boolean;
+  } | null;
 }) {
   return (
     <div
@@ -516,6 +751,27 @@ function PreviewCanvas({
       >
         {name}
       </div>
+      {secondary && (
+        <div
+          className={`absolute ${fontClassFor(font)} pointer-events-none whitespace-nowrap`}
+          style={{
+            left: `${secondary.x}%`,
+            top: `${secondary.y}%`,
+            transform: nameTransform(
+              secondary.rotation,
+              secondary.tiltX,
+              secondary.tiltY
+            ),
+            transformStyle: "preserve-3d",
+            fontSize: `${secondary.size}px`,
+            color: secondary.colour,
+            opacity: secondary.placeholder ? 0.35 : 1,
+            ...fontStyleFor(font),
+          }}
+        >
+          {secondary.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -593,6 +849,26 @@ function ConfirmationScreen({
               {submitted.queue_number}
             </p>
           </div>
+
+          {submitted.gift_received === false && (
+            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4 mb-6 text-left">
+              <p className="text-2xl text-center mb-1">🎁</p>
+              <p className="text-base font-bold text-amber-800 text-center">
+                Please drop off your door gift with our crew now.
+              </p>
+              {submitted.gift_items_selected &&
+                submitted.gift_items_selected.length > 0 && (
+                  <ul className="text-sm text-amber-800 text-center mt-2 font-semibold list-none">
+                    {submitted.gift_items_selected.map((g) => (
+                      <li key={g}>· {g}</li>
+                    ))}
+                  </ul>
+                )}
+              <p className="text-sm text-amber-700 text-center mt-1 leading-relaxed">
+                We'll only start engraving once we receive your gift.
+              </p>
+            </div>
+          )}
 
           {qrDataUrl && (
             <div className="flex flex-col items-center mb-6">

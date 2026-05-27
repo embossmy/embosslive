@@ -156,6 +156,26 @@ export default function StatusPage() {
           </h1>
         </header>
 
+        {order.gift_received === false && status !== "collected" && (
+          <div className="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-4 text-center mb-4 animate-fade-in">
+            <p className="text-2xl mb-0.5">🎁</p>
+            <p className="text-sm font-bold text-amber-800">
+              Please drop off your door gift with our crew.
+            </p>
+            {order.gift_items_selected &&
+              order.gift_items_selected.length > 0 && (
+                <ul className="text-xs text-amber-800 mt-2 font-semibold list-none">
+                  {order.gift_items_selected.map((g) => (
+                    <li key={g}>· {g}</li>
+                  ))}
+                </ul>
+              )}
+            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+              We'll only start engraving once we receive your gift.
+            </p>
+          </div>
+        )}
+
         {!isProblem && status !== "collected" && status !== "ready" && (
           <div className="rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-center mb-4 animate-fade-in">
             <p className="text-sm font-bold text-red-700">
