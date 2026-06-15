@@ -25,6 +25,28 @@ import GoogleFontsLoader from "@/components/GoogleFontsLoader";
 
 const DEFAULT_FONTS = ["Modern", "Elegant Script", "Classic Serif"];
 
+// Detects when the iOS soft keyboard is open by watching for a significant
+// reduction in the visual viewport height relative to the layout viewport.
+// Returns true while the keyboard is visible.
+function useKeyboardOpen(threshold = 0.75): boolean {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    function check() {
+      setOpen((vv!.height / window.innerHeight) < threshold);
+    }
+    vv.addEventListener("resize", check);
+    vv.addEventListener("scroll", check);
+    check();
+    return () => {
+      vv!.removeEventListener("resize", check);
+      vv!.removeEventListener("scroll", check);
+    };
+  }, [threshold]);
+  return open;
+}
+
 export default function GuestEventPage() {
   const params = useParams<{ eventId: string }>();
   const eventId = params.eventId;
@@ -431,6 +453,8 @@ export default function GuestEventPage() {
     );
   }
 
+  const keyboardOpen = useKeyboardOpen();
+
   return (
     <main className="min-h-screen p-4 md:p-6 flex flex-col">
       <GoogleFontsLoader fonts={fonts} />
@@ -447,8 +471,21 @@ export default function GuestEventPage() {
           )}
         </header>
 
-        {/* Preview — sticky so it stays visible while the form below is scrolled */}
-        <div className="card p-4 md:p-5 mb-5 overflow-hidden sticky top-4 z-10">
+        {/* Preview — sticky normally; fixed above keyboard when iOS soft keyboard is open */}
+        <div
+          className="card p-4 md:p-5 mb-5 overflow-hidden z-20"
+          style={keyboardOpen ? {
+            position: "fixed",
+            top: 8,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "min(calc(100vw - 2rem), 56rem)",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+          } : {
+            position: "sticky",
+            top: 16,
+          }}
+        >
           <PreviewCanvas
             imageUrl={
               (colour && parseColour(colour).imageUrl) ||
@@ -489,6 +526,9 @@ export default function GuestEventPage() {
             Maximum {maxLen} characters
           </p>
         </div>
+
+        {/* Spacer so fixed preview doesn't overlap form on iOS */}
+        {keyboardOpen && <div className="h-[220px] md:h-[260px]" aria-hidden />}
 
         {/* Form */}
         <div className="card p-5 md:p-7 mb-2">
