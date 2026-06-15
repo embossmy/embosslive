@@ -92,6 +92,7 @@ export default function GuestEventPage() {
   // on the product (e.g. front + back, or two slots on a luggage tag) using
   // the preview_name2_* placement/style fields.
   const name2Enabled = !!tpl?.name2_enabled;
+  const lettersOnly = !!tpl?.name_letters_only;
   const giftItems = (tpl?.gift_items as string[] | null) ?? [];
   const hasMultipleGifts = giftItems.length >= 2;
 
@@ -163,8 +164,9 @@ export default function GuestEventPage() {
   const cleanName = useMemo(() => sanitizeName(name), [name]);
   const tooLong = cleanName.length > maxLen;
   const containsEmoji = hasEmoji(name);
+  const containsDigitOrSymbol = lettersOnly && /[^\p{L}\p{M} ]/u.test(cleanName);
   const canSubmit =
-    cleanName.length > 0 && !tooLong && !containsEmoji && !submitting;
+    cleanName.length > 0 && !tooLong && !containsEmoji && !containsDigitOrSymbol && !submitting;
 
   async function submit() {
     setSubmitting(true);
@@ -432,7 +434,7 @@ export default function GuestEventPage() {
   return (
     <main className="min-h-screen p-4 md:p-6 flex flex-col">
       <GoogleFontsLoader fonts={fonts} />
-      <div className="max-w-3xl mx-auto w-full flex-1">
+      <div className="max-w-5xl mx-auto w-full flex-1">
         <header className="text-center mb-5 md:mb-7">
           <p className="text-[10px] tracking-[0.5em] text-mocha uppercase mb-1">
             EMBOSS · Live Personalization
@@ -445,8 +447,8 @@ export default function GuestEventPage() {
           )}
         </header>
 
-        {/* Preview — top, prominent */}
-        <div className="card p-4 md:p-5 mb-5 overflow-hidden">
+        {/* Preview — sticky so it stays visible while the form below is scrolled */}
+        <div className="card p-4 md:p-5 mb-5 overflow-hidden sticky top-4 z-10">
           <PreviewCanvas
             imageUrl={
               (colour && parseColour(colour).imageUrl) ||
@@ -488,7 +490,7 @@ export default function GuestEventPage() {
           </p>
         </div>
 
-        {/* Form — bottom */}
+        {/* Form */}
         <div className="card p-5 md:p-7 mb-2">
           <label className="label">Your Name</label>
           <input
@@ -501,13 +503,17 @@ export default function GuestEventPage() {
               // count toward the limit. Trim the raw input first so users
               // can't bypass via leading whitespace, but keep internal spaces.
               const next = e.target.value;
-              const sanitizedLen = sanitizeName(next).length;
+              // If letters-only mode is on, strip digits and symbols immediately.
+              const filtered = lettersOnly
+                ? next.replace(/[^\p{L}\p{M} ]/gu, "")
+                : next;
+              const sanitizedLen = sanitizeName(filtered).length;
               if (sanitizedLen <= maxLen) {
-                setName(next);
+                setName(filtered);
               } else {
                 // Allow deletion / no-op if pasted text exceeds limit:
                 // truncate to fit.
-                let truncated = next;
+                let truncated = filtered;
                 while (truncated.length > 0 && sanitizeName(truncated).length > maxLen) {
                   truncated = truncated.slice(0, -1);
                 }
@@ -522,6 +528,8 @@ export default function GuestEventPage() {
                 ? "⚠️ Please remove emojis."
                 : tooLong
                 ? `⚠️ Maximum ${maxLen} characters`
+                : lettersOnly
+                ? "Letters and spaces only — no numbers or symbols"
                 : "Letters and spaces only"}
             </span>
             <span className={`tabular-nums ${
@@ -684,6 +692,70 @@ export default function GuestEventPage() {
   );
 }
 
+// Returns CSS style for the three leather finishing treatments.
+// The admin sets preview_name_colour to one of these keywords.
+type EmbossStyle = "deboss" | "gold-foil" | "silver-foil" | null;
+
+function parseEmbossStyle(colour: string): EmbossStyle {
+  const k = colour.trim().toLowerCase();
+  if (k === "deboss") return "deboss";
+  if (k === "gold-foil" || k === "gold foil") return "gold-foil";
+  if (k === "silver-foil" || k === "silver foil") return "silver-foil";
+  return null;
+}
+
+function embossTextStyle(
+  style: EmbossStyle,
+  placeholder: boolean
+): React.CSSProperties {
+  const opacity = placeholder ? 0.45 : 1;
+  switch (style) {
+    case "deboss":
+      // Pressed-into-leather effect: transparent fill, inset shadow pair
+      // (dark below = pressed depth, light above = raised edge catch).
+      return {
+        color: "transparent",
+        WebkitTextStroke: "0px",
+        textShadow: [
+          "0px 1px 1px rgba(0,0,0,0.55)",   // depth shadow (below)
+          "0px -1px 0px rgba(255,255,255,0.18)", // rim highlight (above)
+        ].join(", "),
+        opacity,
+        // We paint the text as a clipping mask so the shadow shows through.
+        // This is the pure-CSS deboss trick: colour=transparent + text-shadow.
+        WebkitBackgroundClip: "text" as React.CSSProperties["WebkitBackgroundClip"],
+        backgroundImage:
+          "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.0) 100%)",
+        backgroundClip: "text",
+      };
+    case "gold-foil":
+      // Tight specular band mimicking stamped gold foil on leather:
+      // deep warm gold base → narrow bright highlight → back to rich gold.
+      return {
+        color: "transparent",
+        backgroundImage:
+          "linear-gradient(160deg, #7A5C1E 0%, #C9922A 20%, #E8C55A 38%, #FDF3A0 46%, #E8C55A 54%, #B8861F 72%, #7A5C1E 100%)",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        filter: "drop-shadow(0px 1.5px 1px rgba(80,50,0,0.6))",
+        opacity,
+      };
+    case "silver-foil":
+      // Cool chrome: dark steel base → sharp white specular → back to steel.
+      return {
+        color: "transparent",
+        backgroundImage:
+          "linear-gradient(160deg, #3A3A3A 0%, #7A7A7A 18%, #C8C8C8 36%, #F5F5F5 46%, #C8C8C8 56%, #707070 74%, #3A3A3A 100%)",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        filter: "drop-shadow(0px 1.5px 1px rgba(0,0,0,0.5))",
+        opacity,
+      };
+    default:
+      return {};
+  }
+}
+
 function PreviewCanvas({
   imageUrl,
   name,
@@ -716,10 +788,12 @@ function PreviewCanvas({
     rotation: number;
     tiltX: number;
     tiltY: number;
-    // When true, render at lower opacity to indicate it's a placeholder.
     placeholder?: boolean;
   } | null;
 }) {
+  const embossStyle = parseEmbossStyle(colour);
+  const secEmbossStyle = secondary ? parseEmbossStyle(secondary.colour) : null;
+
   return (
     <div
       className="relative w-full rounded-2xl overflow-hidden bg-ivory border border-sand/60 aspect-[4/3]"
@@ -745,8 +819,9 @@ function PreviewCanvas({
           transform: nameTransform(rotation, tiltX, tiltY),
           transformStyle: "preserve-3d",
           fontSize: `${size}px`,
-          color: colour,
+          color: embossStyle ? "transparent" : colour,
           ...fontStyleFor(font),
+          ...(embossStyle ? embossTextStyle(embossStyle, false) : {}),
         }}
       >
         {name}
@@ -764,9 +839,11 @@ function PreviewCanvas({
             ),
             transformStyle: "preserve-3d",
             fontSize: `${secondary.size}px`,
-            color: secondary.colour,
-            opacity: secondary.placeholder ? 0.35 : 1,
+            color: secEmbossStyle ? "transparent" : secondary.colour,
             ...fontStyleFor(font),
+            ...(secEmbossStyle
+              ? embossTextStyle(secEmbossStyle, secondary.placeholder ?? false)
+              : { opacity: secondary.placeholder ? 0.35 : 1 }),
           }}
         >
           {secondary.text}
@@ -827,98 +904,91 @@ function ConfirmationScreen({
     : 0;
 
   return (
-    <main className="min-h-screen flex flex-col p-5">
-      <div className="flex-1 flex items-center justify-center py-8">
-        <div className="card max-w-xl w-full p-8 md:p-10 text-center">
-          <p className="text-[10px] tracking-[0.5em] text-mocha uppercase mb-3">
-            {eventName}
-          </p>
-          <h1 className="font-serif text-4xl md:text-5xl mb-1">Thank you!</h1>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-mocha mt-5 mb-1">
-            Engraving for
-          </p>
-          <p className="font-serif text-3xl md:text-4xl mb-6 text-ink">
-            {submitted.guest_name}
-          </p>
+    <main className="min-h-screen flex flex-col">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 py-10">
 
-          <div className="bg-ivory rounded-2xl p-5 mb-6 border border-sand/60">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-mocha mb-1">
-              Your queue number
+        {/* ── 1. PRIMARY ACTION: QR code ─────────────────────────────── */}
+        {qrDataUrl && (
+          <div className="flex flex-col items-center text-center mb-8">
+            <p className="text-[10px] tracking-[0.5em] text-mocha uppercase mb-6">
+              {eventName}
             </p>
-            <p className="font-serif text-7xl md:text-8xl text-ink leading-none py-2">
+            <h1 className="font-serif text-6xl md:text-7xl font-bold text-ink leading-none mb-3">
+              Scan the QR
+            </h1>
+            <p className="text-mocha text-base md:text-lg mb-8 max-w-xs leading-relaxed">
+              Track your order and know exactly when it&apos;s ready to collect.
+            </p>
+
+            <div className="relative inline-block">
+              <img
+                src={qrDataUrl}
+                alt="Scan to track your order"
+                className="w-72 h-72 md:w-96 md:h-96 rounded-3xl bg-white p-4 shadow-card"
+              />
+              <span className="absolute -top-2 -left-2 w-8 h-8 border-t-4 border-l-4 border-gold rounded-tl-lg animate-pulse-soft" />
+              <span className="absolute -top-2 -right-2 w-8 h-8 border-t-4 border-r-4 border-gold rounded-tr-lg animate-pulse-soft" />
+              <span className="absolute -bottom-2 -left-2 w-8 h-8 border-b-4 border-l-4 border-gold rounded-bl-lg animate-pulse-soft" />
+              <span className="absolute -bottom-2 -right-2 w-8 h-8 border-b-4 border-r-4 border-gold rounded-br-lg animate-pulse-soft" />
+            </div>
+          </div>
+        )}
+
+        {/* ── 2. SECONDARY INFO: queue number + name ─────────────────── */}
+        <div className="flex items-center gap-6 mb-6">
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-mocha mb-1">Queue</p>
+            <p className="font-serif text-6xl md:text-7xl text-ink leading-none">
               {submitted.queue_number}
             </p>
           </div>
-
-          {submitted.gift_received === false && (
-            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4 mb-6 text-left">
-              <p className="text-2xl text-center mb-1">🎁</p>
-              <p className="text-base font-bold text-amber-800 text-center">
-                Please drop off your door gift with our crew now.
-              </p>
-              {submitted.gift_items_selected &&
-                submitted.gift_items_selected.length > 0 && (
-                  <ul className="text-sm text-amber-800 text-center mt-2 font-semibold list-none">
-                    {submitted.gift_items_selected.map((g) => (
-                      <li key={g}>· {g}</li>
-                    ))}
-                  </ul>
-                )}
-              <p className="text-sm text-amber-700 text-center mt-1 leading-relaxed">
-                We'll only start engraving once we receive your gift.
-              </p>
-            </div>
-          )}
-
-          {qrDataUrl && (
-            <div className="flex flex-col items-center mb-6">
-              <div className="relative inline-block">
-                <img
-                  src={qrDataUrl}
-                  alt="Status QR"
-                  className="w-48 h-48 rounded-xl border border-sand/60 shadow-sm"
-                />
-                {/* Animated scan hint pointing down at the QR */}
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center pointer-events-none select-none">
-                  <span className="text-3xl animate-bounce" aria-hidden="true">
-                    👇
-                  </span>
-                </div>
-                {/* Animated corner brackets to draw the eye */}
-                <span className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-gold rounded-tl-md animate-pulse-soft" />
-                <span className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-gold rounded-tr-md animate-pulse-soft" />
-                <span className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-gold rounded-bl-md animate-pulse-soft" />
-                <span className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-gold rounded-br-md animate-pulse-soft" />
-              </div>
-              <p className="text-base font-semibold text-ink mt-4">
-                📲 Scan with your phone camera
-              </p>
-              <p className="text-xs text-mocha mt-1">
-                Scan to track your order on your phone.
-              </p>
-            </div>
-          )}
-
-          <button
-            className="btn-primary w-full text-base py-4 relative overflow-hidden"
-            onClick={onReset}
-          >
-            <span className="relative z-10">
-              {autoResetEnabled ? `Next Guest (auto in ${remaining}s)` : "Next Guest"}
-            </span>
-            {autoResetEnabled && (
-              <span
-                className="absolute left-0 bottom-0 h-1 bg-gold transition-[width] duration-1000 ease-linear"
-                style={{ width: `${progressPct}%` }}
-              />
-            )}
-          </button>
-          {autoResetEnabled && (
-            <p className="text-[11px] text-mocha/60 mt-2">
-              Tap anywhere on the button to reset now.
+          <div className="w-px h-14 bg-sand" />
+          <div className="text-left">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-mocha mb-1">Engraving for</p>
+            <p className="font-serif text-2xl md:text-3xl text-ink leading-tight">
+              {submitted.guest_name}
             </p>
-          )}
+            <p className="text-xs text-mocha/60 mt-1">Order submitted</p>
+          </div>
         </div>
+
+        {/* ── 3. CONTEXTUAL: gift reminder (only when needed) ────────── */}
+        {submitted.gift_received === false && (
+          <div className="rounded-2xl border border-amber-400/50 bg-amber-400/10 px-5 py-4 mb-6 text-center max-w-sm w-full">
+            <p className="text-xs uppercase tracking-widest text-amber-600 font-semibold mb-1">
+              Action required
+            </p>
+            <p className="text-base font-semibold text-amber-800">
+              Drop off your door gift with our crew.
+            </p>
+            {submitted.gift_items_selected &&
+              submitted.gift_items_selected.length > 0 && (
+                <p className="text-sm text-amber-700 mt-1.5">
+                  {submitted.gift_items_selected.join(" · ")}
+                </p>
+              )}
+            <p className="text-xs text-amber-600/80 mt-2">
+              We will only start once we receive your gift.
+            </p>
+          </div>
+        )}
+
+        {/* ── 4. RESET BUTTON ────────────────────────────────────────── */}
+        <button
+          className="relative overflow-hidden rounded-xl border border-sand text-mocha/50 text-sm py-3 px-8 tracking-wide hover:bg-sand/40 transition-colors mt-2"
+          onClick={onReset}
+        >
+          <span className="relative z-10">
+            {autoResetEnabled ? `Next Guest · resets in ${remaining}s` : "Next Guest"}
+          </span>
+          {autoResetEnabled && (
+            <span
+              className="absolute left-0 bottom-0 h-0.5 bg-mocha/20 transition-[width] duration-1000 ease-linear"
+              style={{ width: `${progressPct}%` }}
+            />
+          )}
+        </button>
+
       </div>
       <Footer />
     </main>

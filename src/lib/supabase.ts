@@ -30,6 +30,17 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelled: "Cancelled",
 };
 
+// Short, single-word labels for compact UIs like the mobile status timeline,
+// where full labels would wrap or truncate.
+export const STATUS_SHORT: Record<OrderStatus, string> = {
+  waiting: "Received",
+  engraving: "Engraving",
+  ready: "Ready",
+  collected: "Collected",
+  issue: "Attention",
+  cancelled: "Cancelled",
+};
+
 export const STATUS_STEPS: OrderStatus[] = [
   "waiting",
   "engraving",
@@ -93,6 +104,7 @@ export interface EventTemplate {
   preview_name2_rotation: number | null;
   preview_name2_tilt_x: number | null;
   preview_name2_tilt_y: number | null;
+  name_letters_only: boolean | null;
 }
 
 export interface Order {

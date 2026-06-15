@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import {
   supabase,
   STATUS_LABEL,
+  STATUS_SHORT,
   STATUS_STEPS,
   type EmbossEvent,
   type EventTemplate,
@@ -142,9 +143,6 @@ export default function StatusPage() {
   const isProblem = status === "issue" || status === "cancelled";
 
   const totalSteps = STATUS_STEPS.length;
-  const progress = isProblem
-    ? 0
-    : Math.max(0, Math.min(1, (stepIdx + 1) / totalSteps));
 
   return (
     <main className="min-h-screen p-5 flex flex-col">
@@ -206,54 +204,29 @@ export default function StatusPage() {
           </div>
         </div>
 
-        {/* Status + progress bar */}
+        {/* Status tracker - vertical timeline (fully readable, no truncation) */}
         <div
           className={`card p-6 mb-4 animate-fade-in ${
             isProblem ? "bg-red-50 border-red-200" : ""
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-5">
             <p className="text-[10px] uppercase tracking-[0.3em] text-mocha">
               Current Status
             </p>
             {!isProblem && (
-              <span className="text-[10px] bg-sand/40 text-mocha px-2 py-0.5 rounded-full tabular-nums">
-                {Math.min(stepIdx + 1, totalSteps)} / {totalSteps}
+              <span className="text-[10px] bg-sand/40 text-mocha px-2.5 py-1 rounded-full tabular-nums font-medium">
+                Step {Math.min(stepIdx + 1, totalSteps)} of {totalSteps}
               </span>
             )}
           </div>
-          <p
-            className={`font-serif text-2xl md:text-3xl mb-4 ${
-              isProblem ? "text-red-700" : "text-ink"
-            }`}
-          >
-            {STATUS_LABEL[status]}
-          </p>
-          {!isProblem && (
-            <>
-              <div className="w-full h-2.5 bg-sand/40 rounded-full overflow-hidden mb-3">
-                <div
-                  className="h-full bg-gold rounded-full transition-[width] duration-700 ease-out"
-                  style={{ width: `${progress * 100}%` }}
-                />
-              </div>
-              <ol className="grid grid-cols-4 gap-1 text-[10px] tracking-wide">
-                {STATUS_STEPS.map((s, i) => (
-                  <li
-                    key={s}
-                    className={`text-center truncate transition-colors ${
-                      i < stepIdx
-                        ? "text-gold/80 font-medium"
-                        : i === stepIdx
-                        ? "text-ink font-semibold"
-                        : "text-mocha/40"
-                    }`}
-                  >
-                    {STATUS_LABEL[s]}
-                  </li>
-                ))}
-              </ol>
-            </>
+
+          {isProblem ? (
+            <p className="font-serif text-2xl md:text-3xl text-red-700">
+              {STATUS_LABEL[status]}
+            </p>
+          ) : (
+            <StatusTimeline stepIdx={stepIdx} />
           )}
         </div>
 
@@ -284,6 +257,88 @@ export default function StatusPage() {
       </div>
       <Footer />
     </main>
+  );
+}
+
+const STEP_CAPTIONS: Record<OrderStatus, string> = {
+  waiting: "We have added your order to the queue.",
+  engraving: "Your gift is being personalized right now.",
+  ready: "Come collect your gift at the counter.",
+  collected: "All done. Enjoy your gift!",
+  issue: "",
+  cancelled: "",
+};
+
+function StatusTimeline({ stepIdx }: { stepIdx: number }) {
+  return (
+    <ol className="relative">
+      {STATUS_STEPS.map((s, i) => {
+        const done = i < stepIdx;
+        const current = i === stepIdx;
+        const isLast = i === STATUS_STEPS.length - 1;
+        return (
+          <li key={s} className="relative flex gap-4 pb-7 last:pb-0">
+            {!isLast && (
+              <span
+                className={`absolute left-[17px] top-9 -bottom-1 w-0.5 ${
+                  done ? "bg-gold" : "bg-sand/60"
+                }`}
+                aria-hidden="true"
+              />
+            )}
+            <span
+              className={`relative z-10 flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                done
+                  ? "bg-gold text-white"
+                  : current
+                  ? "bg-ink text-white ring-4 ring-gold/25"
+                  : "bg-sand/40 text-mocha/50"
+              }`}
+            >
+              {done ? (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 16 16"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 8.5l3 3L13 4.5"
+                  />
+                </svg>
+              ) : (
+                i + 1
+              )}
+            </span>
+            <div className="flex-1 pt-1">
+              <p
+                className={`text-lg font-semibold leading-tight flex items-center gap-2 ${
+                  current ? "text-ink" : done ? "text-ink/70" : "text-mocha/45"
+                }`}
+              >
+                {STATUS_SHORT[s]}
+                {current && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-gold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+                    Now
+                  </span>
+                )}
+              </p>
+              <p
+                className={`text-xs mt-1 leading-snug ${
+                  current ? "text-mocha" : "text-mocha/45"
+                }`}
+              >
+                {STEP_CAPTIONS[s]}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

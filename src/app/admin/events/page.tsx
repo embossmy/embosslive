@@ -64,6 +64,7 @@ interface FormState {
   preview_name2_rotation: number;
   preview_name2_tilt_x: number;
   preview_name2_tilt_y: number;
+  name_letters_only: boolean;
 }
 
 const empty: FormState = {
@@ -113,6 +114,7 @@ const empty: FormState = {
   preview_name2_rotation: 0,
   preview_name2_tilt_x: 0,
   preview_name2_tilt_y: 0,
+  name_letters_only: false,
 };
 
 export default function EventsAdminPage() {
@@ -296,6 +298,7 @@ export default function EventsAdminPage() {
       preview_name2_rotation: Number(t?.preview_name2_rotation ?? 0),
       preview_name2_tilt_x: Number(t?.preview_name2_tilt_x ?? 0),
       preview_name2_tilt_y: Number(t?.preview_name2_tilt_y ?? 0),
+      name_letters_only: Boolean(t?.name_letters_only ?? false),
     };
     isApplyingRef.current = true;
     setForm(next);
@@ -382,6 +385,7 @@ export default function EventsAdminPage() {
         preview_name2_rotation: form.preview_name2_rotation,
         preview_name2_tilt_x: form.preview_name2_tilt_x,
         preview_name2_tilt_y: form.preview_name2_tilt_y,
+        name_letters_only: form.name_letters_only,
       };
 
       if (evId && templates[evId]) {
@@ -816,15 +820,30 @@ export default function EventsAdminPage() {
                     </button>
                   </div>
                 </Field>
-                <Field label="Preview text colour">
-                  <input
-                    type="color"
-                    className="input h-12"
-                    value={form.preview_name_colour}
-                    onChange={(e) =>
-                      setForm({ ...form, preview_name_colour: e.target.value })
-                    }
-                  />
+                <Field label="Preview text colour / finish" full>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      className="input flex-1"
+                      placeholder="#3B2A1A · deboss · gold-foil · silver-foil"
+                      value={form.preview_name_colour}
+                      onChange={(e) =>
+                        setForm({ ...form, preview_name_colour: e.target.value })
+                      }
+                    />
+                    <input
+                      type="color"
+                      className="h-10 w-10 rounded cursor-pointer border border-sand flex-shrink-0"
+                      value={/^#[0-9a-fA-F]{3,8}$/.test(form.preview_name_colour) ? form.preview_name_colour : "#3B2A1A"}
+                      onChange={(e) =>
+                        setForm({ ...form, preview_name_colour: e.target.value })
+                      }
+                    />
+                  </div>
+                  <p className="text-xs text-mocha/60 mt-1">
+                    Enter a hex colour (e.g. <code>#3B2A1A</code>) or a finish keyword:{" "}
+                    <code>deboss</code>, <code>gold-foil</code>, <code>silver-foil</code>
+                  </p>
                 </Field>
                 <Field label="Max name length">
                   <input
@@ -835,6 +854,22 @@ export default function EventsAdminPage() {
                       setForm({ ...form, max_name_length: Number(e.target.value) })
                     }
                   />
+                </Field>
+                <Field label="Letters only" full>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={form.name_letters_only}
+                      onChange={(e) =>
+                        setForm({ ...form, name_letters_only: e.target.checked })
+                      }
+                    />
+                    <span>
+                      Block digits and symbols — guests can only enter letters and spaces.
+                      Use this for engraving events where numbers or punctuation are not allowed.
+                    </span>
+                  </label>
                 </Field>
               </div>
             </Section>
@@ -985,18 +1020,30 @@ export default function EventsAdminPage() {
                         </button>
                       </div>
                     </Field>
-                    <Field label="Second text colour">
-                      <input
-                        type="color"
-                        className="input h-12"
-                        value={form.preview_name2_colour}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            preview_name2_colour: e.target.value,
-                          })
-                        }
-                      />
+                    <Field label="Second text colour / finish" full>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          className="input flex-1"
+                          placeholder="#3B2A1A · deboss · gold-foil · silver-foil"
+                          value={form.preview_name2_colour}
+                          onChange={(e) =>
+                            setForm({ ...form, preview_name2_colour: e.target.value })
+                          }
+                        />
+                        <input
+                          type="color"
+                          className="h-10 w-10 rounded cursor-pointer border border-sand flex-shrink-0"
+                          value={/^#[0-9a-fA-F]{3,8}$/.test(form.preview_name2_colour) ? form.preview_name2_colour : "#3B2A1A"}
+                          onChange={(e) =>
+                            setForm({ ...form, preview_name2_colour: e.target.value })
+                          }
+                        />
+                      </div>
+                      <p className="text-xs text-mocha/60 mt-1">
+                        Enter a hex colour or a finish keyword:{" "}
+                        <code>deboss</code>, <code>gold-foil</code>, <code>silver-foil</code>
+                      </p>
                     </Field>
                   </>
                 )}
