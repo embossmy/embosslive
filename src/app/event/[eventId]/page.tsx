@@ -31,6 +31,7 @@ const DEFAULT_FONTS = ["Modern", "Elegant Script", "Classic Serif"];
 function useKeyboardOpen(threshold = 0.75): boolean {
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const vv = window.visualViewport;
     if (!vv) return;
     function check() {
