@@ -25,6 +25,11 @@ import GoogleFontsLoader from "@/components/GoogleFontsLoader";
 
 const DEFAULT_FONTS = ["Modern", "Elegant Script", "Classic Serif"];
 
+// Check if event is the re|define leadership event (for custom styling)
+function isRedefineEvent(eventName: string): boolean {
+  return eventName.toLowerCase().includes("re|define") || eventName.toLowerCase().includes("redefine");
+}
+
 export default function GuestEventPage() {
   const params = useParams<{ eventId: string }>();
   const eventId = params.eventId;
@@ -320,7 +325,7 @@ export default function GuestEventPage() {
             </button>
           </div>
         </div>
-        <Footer />
+        <Footer hideBranding />
       </main>
     );
   }
@@ -335,7 +340,7 @@ export default function GuestEventPage() {
       <main className="min-h-screen flex flex-col p-5">
         <div className="flex-1 flex items-center justify-center py-6">
           <div className="card max-w-xl w-full p-8 md:p-10 text-center">
-            <p className="text-[10px] tracking-[0.5em] text-mocha uppercase mb-3">
+            <p className={`text-[10px] tracking-[0.5em] text-mocha mb-3 ${isRedefineEvent(event.event_name) ? "" : "uppercase"}`}>
               {event.event_name}
             </p>
             <p className="text-4xl mb-2">🎁</p>
@@ -910,7 +915,7 @@ function ConfirmationScreen({
         {/* ── 1. PRIMARY ACTION: QR code ─────────────────────────────── */}
         {qrDataUrl && (
           <div className="flex flex-col items-center text-center mb-8">
-            <p className="text-[10px] tracking-[0.5em] text-mocha uppercase mb-6">
+            <p className={`text-[10px] tracking-[0.5em] text-mocha mb-6 ${isRedefineEvent(eventName) ? "" : "uppercase"}`}>
               {eventName}
             </p>
             <h1 className="font-serif text-6xl md:text-7xl font-bold text-ink leading-none mb-3">
