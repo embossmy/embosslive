@@ -158,7 +158,7 @@ export default function StatusPage() {
           <div className="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-4 text-center mb-4 animate-fade-in">
             <p className="text-2xl mb-0.5">🎁</p>
             <p className="text-sm font-bold text-amber-800">
-              Please drop off your door gift with our crew.
+              Please drop off your item(s) with our crew.
             </p>
             {order.gift_items_selected &&
               order.gift_items_selected.length > 0 && (

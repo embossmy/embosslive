@@ -964,7 +964,7 @@ function ConfirmationScreen({
               Action required
             </p>
             <p className="text-base font-semibold text-amber-800">
-              Drop off your door gift with our crew.
+              Please drop off your item(s) with our crew.
             </p>
             {submitted.gift_items_selected &&
               submitted.gift_items_selected.length > 0 && (
