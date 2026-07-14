@@ -547,7 +547,7 @@ export default function GuestEventPage() {
           {fonts.length > 1 && (
           <div className="mt-6">
             <p className="label">Font Style</p>
-            <div className={`grid gap-3 ${fonts.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+            <div className="flex flex-wrap gap-3">
               {fonts.map((f) => {
                 const previewText = cleanName || "Your Name";
                 const isActive = font === f;
@@ -555,7 +555,7 @@ export default function GuestEventPage() {
                   <button
                     key={f}
                     onClick={() => setFont(f)}
-                    className={`relative flex flex-col items-center justify-center rounded-xl border-2 px-3 pt-6 pb-4 transition-all duration-150 select-none
+                    className={`relative flex flex-col items-center justify-center rounded-xl border-2 px-3 pt-6 pb-4 transition-all duration-150 select-none flex-1 min-w-[120px]
                       ${isActive
                         ? "border-gold bg-champagne/30 shadow-sm"
                         : "border-sand bg-white hover:border-mocha/30 hover:bg-champagne/10"
@@ -569,7 +569,7 @@ export default function GuestEventPage() {
                       </span>
                     )}
                     <span
-                      className={`block text-3xl leading-tight text-center w-full overflow-hidden ${fontClassFor(f)}`}
+                      className={`block text-3xl leading-tight text-center w-full break-words ${fontClassFor(f)}`}
                       style={{ ...fontStyleFor(f), color: "#1A1A1A" }}
                     >
                       {previewText}
@@ -587,7 +587,7 @@ export default function GuestEventPage() {
           {colours.length > 0 && (
             <div className="mt-5">
               <p className="label">Gift Colour</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="flex flex-wrap gap-2">
                 {colours.map((c) => {
                   const parsed = parseColour(c);
                   const active = colour === c;
@@ -599,7 +599,7 @@ export default function GuestEventPage() {
                       key={c}
                       disabled={outOfStock}
                       onClick={() => !outOfStock && setColour(c)}
-                      className={`relative flex items-center justify-center rounded-xl px-4 py-4 transition-all duration-150 select-none ${
+                      className={`relative flex items-center justify-center rounded-xl px-4 py-4 transition-all duration-150 select-none flex-1 min-w-[120px] ${
                         outOfStock ? "cursor-not-allowed" : ""
                       }`}
                       style={{
