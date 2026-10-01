@@ -105,6 +105,8 @@ export interface EventTemplate {
   preview_name2_tilt_x: number | null;
   preview_name2_tilt_y: number | null;
   name_letters_only: boolean | null;
+  guest_id_required: boolean | null;
+  hide_qr_after_submit: boolean | null;
 }
 
 export interface Order {
@@ -113,6 +115,7 @@ export interface Order {
   queue_number: string;
   guest_name: string;
   guest_name2: string | null;
+  guest_id: string | null;
   gift_received: boolean | null;
   gift_items_selected: string[] | null;
   gift_items_received: string[] | null;

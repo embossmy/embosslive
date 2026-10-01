@@ -50,6 +50,8 @@ export default function GuestEventPage() {
   // Gift dropoff step: null = not yet answered, true = guest has gift,
   // false = guest will hand gift to crew. Only used when tpl.gift_required.
   const [giftAnswer, setGiftAnswer] = useState<boolean | null>(null);
+  const [guestId, setGuestId] = useState("");
+  const [guestIdDone, setGuestIdDone] = useState(false);
   // Gift items the guest has chosen to have engraved (subset of
   // tpl.gift_items). Only relevant when the event has 2+ gift items.
   const [giftItemsSelected, setGiftItemsSelected] = useState<string[]>([]);
@@ -209,6 +211,7 @@ export default function GuestEventPage() {
           queue_number: queue,
           guest_name: cleanName,
           guest_name2: null,
+          guest_id: tpl?.guest_id_required ? guestId.trim() : null,
           selected_font: font,
           selected_colour: colour || null,
           status: "waiting",
@@ -228,9 +231,11 @@ export default function GuestEventPage() {
         new_status: "waiting",
       });
 
-      const url = `${window.location.origin}/status/${order.id}`;
-      const qr = await QRCode.toDataURL(url, { width: 320, margin: 1 });
-      setQrDataUrl(qr);
+      if (!tpl?.hide_qr_after_submit) {
+        const url = `${window.location.origin}/status/${order.id}`;
+        const qr = await QRCode.toDataURL(url, { width: 320, margin: 1 });
+        setQrDataUrl(qr);
+      }
     } catch (e: any) {
       setErr(e.message ?? "Could not submit order");
     } finally {
@@ -330,6 +335,50 @@ export default function GuestEventPage() {
     );
   }
 
+  // Optional Guest ID step — required before the personalization form.
+  if (started && !submitted && tpl?.guest_id_required && !guestIdDone) {
+    const canContinueId = guestId.trim().length > 0;
+    return (
+      <main className="min-h-screen flex flex-col p-5">
+        <div className="flex-1 flex items-center justify-center py-6">
+          <form
+            className="card max-w-xl w-full p-8 md:p-10 text-center"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (canContinueId) setGuestIdDone(true);
+            }}
+          >
+            <p className="text-[10px] tracking-[0.5em] text-mocha mb-3 uppercase">
+              {event.event_name}
+            </p>
+            <h1 className="font-serif text-3xl md:text-4xl mb-3 leading-tight">
+              Enter your Guest ID
+            </h1>
+            <p className="text-mocha text-sm md:text-base mb-6 leading-relaxed">
+              Please enter your Guest ID to continue.
+            </p>
+            <input
+              className="input text-2xl md:text-3xl py-4 font-medium text-center mb-6"
+              autoFocus
+              placeholder="Guest ID"
+              value={guestId}
+              maxLength={50}
+              onChange={(e) => setGuestId(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="btn-primary w-full text-lg py-5 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canContinueId}
+            >
+              Continue
+            </button>
+          </form>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
+
   // Optional door-gift dropoff step — informational screen shown after the
   // welcome and before the personalization form. Guests are told to drop off
   // their door gift with the crew after personalizing. When the event has
@@ -422,12 +471,15 @@ export default function GuestEventPage() {
         eventName={event.event_name}
         submitted={submitted}
         qrDataUrl={qrDataUrl}
+        thankYouOnly={Boolean(tpl?.hide_qr_after_submit)}
         autoResetEnabled={Boolean(tpl?.auto_reset_enabled)}
         autoResetSeconds={Number(tpl?.auto_reset_seconds ?? 30)}
         onReset={() => {
           setSubmitted(null);
           setQrDataUrl(null);
           setName("");
+          setGuestId("");
+          setGuestIdDone(false);
           setGiftAnswer(null);
           setGiftItemsSelected(hasMultipleGifts ? giftItems : []);
           setStarted(false);
@@ -873,6 +925,7 @@ function ConfirmationScreen({
   eventName,
   submitted,
   qrDataUrl,
+  thankYouOnly,
   autoResetEnabled,
   autoResetSeconds,
   onReset,
@@ -880,6 +933,7 @@ function ConfirmationScreen({
   eventName: string;
   submitted: Order;
   qrDataUrl: string | null;
+  thankYouOnly: boolean;
   autoResetEnabled: boolean;
   autoResetSeconds: number;
   onReset: () => void;
@@ -907,6 +961,37 @@ function ConfirmationScreen({
   const progressPct = autoResetEnabled
     ? Math.max(0, Math.min(100, (remaining / autoResetSeconds) * 100))
     : 0;
+
+  if (thankYouOnly) {
+    return (
+      <main className="min-h-screen flex flex-col">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 py-10 text-center">
+          <p className="text-[10px] tracking-[0.5em] text-mocha mb-6 uppercase">{eventName}</p>
+          <h1 className="font-serif text-6xl md:text-7xl font-bold text-ink leading-none mb-4">
+            Thank You
+          </h1>
+          <p className="text-mocha text-base md:text-lg mb-10 max-w-sm leading-relaxed">
+            We will inform you via WhatsApp when your item is ready to collect.
+          </p>
+          <button
+            className="relative overflow-hidden rounded-xl border border-sand text-mocha/50 text-sm py-3 px-8 tracking-wide hover:bg-sand/40 transition-colors"
+            onClick={onReset}
+          >
+            <span className="relative z-10">
+              {autoResetEnabled ? `Next Guest · resets in ${remaining}s` : "Next Guest"}
+            </span>
+            {autoResetEnabled && (
+              <span
+                className="absolute left-0 bottom-0 h-0.5 bg-mocha/20 transition-[width] duration-1000 ease-linear"
+                style={{ width: `${progressPct}%` }}
+              />
+            )}
+          </button>
+        </div>
+        <Footer />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen flex flex-col">

@@ -164,6 +164,7 @@ export default function AdminDashboard() {
       if (!q) return true;
       return (
         o.guest_name.toLowerCase().includes(q) ||
+        (o.guest_id ?? "").toLowerCase().includes(q) ||
         o.queue_number.toLowerCase().includes(q)
       );
     });
@@ -431,6 +432,9 @@ export default function AdminDashboard() {
             <tr className="text-left text-mocha uppercase text-[10px] tracking-[0.07em] border-b border-sand/60">
               <th className="px-4 py-3 font-semibold">Queue</th>
               <th className="px-4 py-3 font-semibold">Guest</th>
+              {template?.guest_id_required && (
+                <th className="px-4 py-3 font-semibold">Guest ID</th>
+              )}
               <th className="px-4 py-3 font-semibold">Font</th>
               <th className="px-4 py-3 font-semibold">Colour</th>
               <th className="px-4 py-3 font-semibold">Status</th>
@@ -445,7 +449,7 @@ export default function AdminDashboard() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={template?.gift_required ? 9 : 8} className="text-center py-16 text-mocha">
+                <td colSpan={8 + (template?.gift_required ? 1 : 0) + (template?.guest_id_required ? 1 : 0)} className="text-center py-16 text-mocha">
                   <p className="font-serif text-xl mb-1">No orders</p>
                   <p className="text-sm text-mocha/60">Matching orders will appear here.</p>
                 </td>
@@ -462,6 +466,9 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </td>
+                {template?.guest_id_required && (
+                  <td className="px-4 py-3 font-semibold tabular-nums">{o.guest_id ?? "—"}</td>
+                )}
                 <td className="px-4 py-3">
                   {o.selected_font ? (
                     <span
