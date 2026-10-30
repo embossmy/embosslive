@@ -439,9 +439,6 @@ export default function GuestEventPage() {
   // Optional gift-choice step — guest picks which gift they want (photo grid)
   // before typing their name and choosing font / colour.
   if (started && !submitted && giftChoiceEnabled && !giftChoiceDone) {
-    const chosenRemaining = chosenGiftObj ? remainingForGift(chosenGiftObj) : null;
-    const canContinueGift =
-      !!chosenGiftObj && (chosenRemaining === null || chosenRemaining > 0);
     const n = giftChoices.length;
     // Full class strings so Tailwind keeps them. Portrait stacks big cards;
     // landscape spreads them across.
@@ -480,8 +477,12 @@ export default function GuestEventPage() {
                 key={g.name}
                 type="button"
                 disabled={outOfStock}
-                onClick={() => !outOfStock && setChosenGift(g.name)}
-                className={`relative flex flex-col h-full min-h-0 text-left rounded-3xl border-4 overflow-hidden bg-white transition-all duration-150 select-none active:scale-[0.99] ${
+                onClick={() => {
+                  if (outOfStock) return;
+                  setChosenGift(g.name);
+                  setGiftChoiceDone(true);
+                }}
+                className={`relative flex flex-col h-full min-h-0 text-center rounded-3xl border-4 overflow-hidden bg-white transition-all duration-150 select-none active:scale-[0.99] ${
                   active
                     ? "border-gold shadow-card"
                     : "border-sand hover:border-mocha/30"
@@ -513,12 +514,12 @@ export default function GuestEventPage() {
                     </span>
                   )}
                 </div>
-                <div className={`shrink-0 px-4 py-3 md:px-5 md:py-4 text-center ${active ? "bg-champagne/40" : ""}`}>
-                  <p className="font-serif text-ink text-2xl md:text-3xl leading-tight">
+                <div className={`shrink-0 w-full flex flex-col items-center justify-center px-4 py-3 md:px-5 md:py-4 text-center ${active ? "bg-champagne/40" : ""}`}>
+                  <p className="w-full font-serif text-ink text-2xl md:text-3xl leading-tight text-center">
                     {g.name}
                   </p>
                   {g.description && (
-                    <p className="text-sm md:text-base text-mocha mt-1 leading-snug">
+                    <p className="w-full text-sm md:text-base text-mocha mt-1 leading-snug text-center">
                       {g.description}
                     </p>
                   )}
@@ -526,16 +527,6 @@ export default function GuestEventPage() {
               </button>
             );
           })}
-        </div>
-
-        <div className="shrink-0 pt-3 md:pt-4 max-w-2xl w-full mx-auto">
-          <button
-            className="btn-primary w-full text-xl py-5 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!canContinueGift}
-            onClick={() => canContinueGift && setGiftChoiceDone(true)}
-          >
-            {chosenGiftObj ? `Continue with ${chosenGiftObj.name}` : "Tap a gift to continue"}
-          </button>
         </div>
       </main>
     );
