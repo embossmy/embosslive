@@ -107,6 +107,27 @@ export interface EventTemplate {
   name_letters_only: boolean | null;
   guest_id_required: boolean | null;
   hide_qr_after_submit: boolean | null;
+  // Guest gift choice step (optional)
+  gift_choice_enabled: boolean | null;
+  gift_choices: GiftChoice[] | null;
+}
+
+export interface GiftChoice {
+  name: string;
+  image_url: string | null;
+  description: string | null;
+  stock: number | null; // null = unlimited
+  // Colour options specific to this gift, same encoded format as
+  // EventTemplate.available_colours ("Name:#hex@imageUrl||stock").
+  // Empty / null = fall back to the event's colours.
+  colours?: string[] | null;
+  // Name placement for this gift. null = use the event's preview_name_* values.
+  name_x?: number | null;
+  name_y?: number | null;
+  name_size?: number | null;
+  name_rotation?: number | null;
+  // Max engraving length for this gift. null = use the event's max_name_length.
+  max_name_length?: number | null;
 }
 
 export interface Order {
@@ -119,6 +140,7 @@ export interface Order {
   gift_received: boolean | null;
   gift_items_selected: string[] | null;
   gift_items_received: string[] | null;
+  chosen_gift: string | null;
   selected_font: string | null;
   selected_colour: string | null;
   status: OrderStatus;

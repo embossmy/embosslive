@@ -1,5 +1,38 @@
 @import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Great+Vibes&family=Sora:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap");
 
+/* Self-hosted engraving fonts (files in /public/fonts). Each style gets its
+   own family name and a full weight range so browsers never faux-bold them. */
+@font-face {
+  font-family: "Brittany Signature";
+  src: url("/fonts/BrittanySignature.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Snell Roundhand Web";
+  src: url("/fonts/SnellRoundhand-Regular.otf") format("opentype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Snell Roundhand Bold Web";
+  src: url("/fonts/SnellRoundhand-Bold.otf") format("opentype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Futura Book Web";
+  src: url("/fonts/FuturaCyrillicBook.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Snell Roundhand Black Web";
+  src: url("/fonts/SnellRoundhand-Black.otf") format("opentype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

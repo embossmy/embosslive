@@ -194,6 +194,9 @@ export default function StatusPage() {
           <p className="font-serif text-4xl md:text-5xl text-ink leading-tight mb-5">
             {order.guest_name}
           </p>
+          {order.chosen_gift && (
+            <p className="text-sm text-mocha -mt-3 mb-5">{order.chosen_gift}</p>
+          )}
           <div className="bg-ivory rounded-2xl p-4 border border-sand/60">
             <p className="text-[10px] uppercase tracking-[0.3em] text-mocha">
               Queue Number

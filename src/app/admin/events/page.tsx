@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { supabase, type EmbossEvent, type EventTemplate } from "@/lib/supabase";
+import {
+  supabase,
+  type EmbossEvent,
+  type EventTemplate,
+  type GiftChoice,
+} from "@/lib/supabase";
 import {
   encodeColour,
   encodeFont,
@@ -54,6 +59,9 @@ interface FormState {
   // Door-gift dropoff step
   gift_required: boolean;
   gift_items: string; // comma-separated list, e.g. "Luggage tag, Passport holder"
+  // Guest gift choice step
+  gift_choice_enabled: boolean;
+  gift_choices: GiftChoice[];
   // Second engraving text
   name2_enabled: boolean;
   name2_label: string;
@@ -105,6 +113,8 @@ const empty: FormState = {
   status: "active",
   gift_required: false,
   gift_items: "",
+  gift_choice_enabled: false,
+  gift_choices: [],
   name2_enabled: false,
   name2_label: "Second line",
   preview_name2_x: 50,
@@ -289,6 +299,8 @@ export default function EventsAdminPage() {
       status: (ev.status as "active" | "inactive") ?? "active",
       gift_required: Boolean(t?.gift_required ?? false),
       gift_items: Array.isArray(t?.gift_items) ? (t.gift_items as string[]).join(", ") : "",
+      gift_choice_enabled: Boolean(t?.gift_choice_enabled ?? false),
+      gift_choices: Array.isArray(t?.gift_choices) ? (t.gift_choices as GiftChoice[]) : [],
       name2_enabled: Boolean(t?.name2_enabled ?? false),
       name2_label: t?.name2_label ?? "Second line",
       preview_name2_x: Number(t?.preview_name2_x ?? 50),
@@ -376,6 +388,21 @@ export default function EventsAdminPage() {
         auto_reset_seconds: form.auto_reset_seconds,
         gift_required: form.gift_required,
         gift_items: splitList(form.gift_items),
+        gift_choice_enabled: form.gift_choice_enabled,
+        gift_choices: form.gift_choices
+          .map((g) => ({
+            name: g.name.trim(),
+            image_url: g.image_url?.trim() || null,
+            description: g.description?.trim() || null,
+            stock: g.stock ?? null,
+            colours: (g.colours ?? []).map((c) => c.trim()).filter(Boolean),
+            name_x: g.name_x ?? null,
+            name_y: g.name_y ?? null,
+            name_size: g.name_size ?? null,
+            name_rotation: g.name_rotation ?? null,
+            max_name_length: g.max_name_length ?? null,
+          }))
+          .filter((g) => g.name),
         name2_enabled: form.name2_enabled,
         name2_label: form.name2_label || "Second line",
         preview_name2_x: form.preview_name2_x,
@@ -629,6 +656,50 @@ export default function EventsAdminPage() {
                       which one(s) they want engraved. Leave blank or list
                       only one item to skip the picker.
                     </p>
+                  </Field>
+                )}
+                <Field label="Guest chooses their gift" full>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={form.gift_choice_enabled}
+                      onChange={(e) =>
+                        setForm({ ...form, gift_choice_enabled: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <strong>Let guests pick which gift they want.</strong>
+                      <br />
+                      <span className="text-xs text-mocha">
+                        After tapping Start, guests see a photo grid of the
+                        gift options below and pick one before typing their
+                        name and choosing font &amp; colour. Each gift can have
+                        its own colours (with a photo per colour) and its own
+                        name position. Gifts without their own colours use
+                        the event colours below.
+                      </span>
+                    </span>
+                  </label>
+                </Field>
+                {form.gift_choice_enabled && (
+                  <Field label="Gift options (with photos)" full>
+                    <GiftChoicesEditor
+                      value={form.gift_choices}
+                      onChange={(gift_choices) => setForm((f) => ({ ...f, gift_choices }))}
+                      onError={(m) => setMsg(`Error: ${m}`)}
+                      defaults={{
+                        x: form.preview_name_x,
+                        y: form.preview_name_y,
+                        size: form.preview_name_size,
+                        rotation: form.preview_name_rotation,
+                        tiltX: form.preview_name_tilt_x,
+                        tiltY: form.preview_name_tilt_y,
+                        colour: form.preview_name_colour,
+                        fonts: splitList(form.available_fonts),
+                        maxLen: form.max_name_length,
+                      }}
+                    />
                   </Field>
                 )}
                 <Field label="Crew password (per-event)" full>
@@ -1693,6 +1764,245 @@ function ImageField({
   );
 }
 
+// ---------- Gift choices editor ----------
+
+type GiftPlacementDefaults = {
+  x: number;
+  y: number;
+  size: number;
+  rotation: number;
+  tiltX: number;
+  tiltY: number;
+  colour: string;
+  fonts: string[];
+  maxLen: number;
+};
+
+function GiftChoicesEditor({
+  value,
+  onChange,
+  onError,
+  defaults,
+}: {
+  value: GiftChoice[];
+  onChange: (next: GiftChoice[]) => void;
+  onError: (msg: string) => void;
+  defaults: GiftPlacementDefaults;
+}) {
+  function update(idx: number, patch: Partial<GiftChoice>) {
+    onChange(value.map((g, i) => (i === idx ? { ...g, ...patch } : g)));
+  }
+
+  function move(idx: number, dir: -1 | 1) {
+    const j = idx + dir;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    onChange(next);
+  }
+
+  return (
+    <div className="space-y-3">
+      {value.length === 0 && (
+        <p className="text-sm text-mocha italic">
+          No gift options yet. Add at least 2 so guests have something to choose from.
+        </p>
+      )}
+      {value.map((g, idx) => (
+        <div key={idx} className="rounded-xl border border-sand bg-ivory/60 p-3 space-y-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-semibold text-mocha w-5">{idx + 1}.</span>
+            <input
+              className="input !py-1.5 flex-1 min-w-[10rem]"
+              placeholder="Gift name (e.g. Leather luggage tag)"
+              value={g.name}
+              onChange={(e) => update(idx, { name: e.target.value })}
+            />
+            <label
+              className="text-[11px] text-mocha flex items-center gap-1"
+              title="Stock for this gift. Leave blank for unlimited. Guests can no longer pick it once stock is reached."
+            >
+              <span>Stock</span>
+              <input
+                className="input !py-1.5 !px-2 w-20"
+                type="number"
+                min={0}
+                placeholder="∞"
+                value={g.stock ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const n = v === "" ? null : Math.max(0, Math.floor(Number(v)));
+                  update(idx, { stock: n != null && Number.isFinite(n) ? n : null });
+                }}
+              />
+            </label>
+            <label
+              className="text-[11px] text-mocha flex items-center gap-1"
+              title="Maximum characters guests can engrave on this gift. Leave blank to use the event's max name length."
+            >
+              <span>Max chars</span>
+              <input
+                className="input !py-1.5 !px-2 w-20"
+                type="number"
+                min={1}
+                max={100}
+                placeholder={String(defaults.maxLen)}
+                value={g.max_name_length ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const n = v === "" ? null : Math.max(1, Math.floor(Number(v)));
+                  update(idx, { max_name_length: n != null && Number.isFinite(n) ? n : null });
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-ghost !py-1 !px-2 text-xs"
+              onClick={() => move(idx, -1)}
+              disabled={idx === 0}
+              title="Move up"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="btn-ghost !py-1 !px-2 text-xs"
+              onClick={() => move(idx, 1)}
+              disabled={idx === value.length - 1}
+              title="Move down"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              className="btn-ghost !py-1 !px-3 text-xs"
+              onClick={() => onChange(value.filter((_, i) => i !== idx))}
+            >
+              Remove
+            </button>
+          </div>
+          <input
+            className="input !py-1.5 text-sm"
+            placeholder="Short description (optional, e.g. Full-grain leather, 10cm)"
+            value={g.description ?? ""}
+            onChange={(e) => update(idx, { description: e.target.value })}
+          />
+          <div>
+            <p className="text-[11px] text-mocha mb-1">
+              Photo shown to guests (also used as the engraving preview)
+            </p>
+            <ImageField
+              value={g.image_url ?? ""}
+              onChange={(v) => update(idx, { image_url: v || null })}
+              onError={onError}
+              pathPrefix={`gift/${g.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "x"}`}
+            />
+          </div>
+          <details className="rounded-lg border border-sand bg-white/70 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">
+              Colours for this gift
+              <span className="ml-2 text-xs font-normal text-mocha">
+                {(g.colours ?? []).length > 0
+                  ? `${(g.colours ?? []).length} colour(s)`
+                  : "using event colours"}
+              </span>
+            </summary>
+            <p className="text-[11px] text-mocha my-2">
+              Add each colour and upload the photo of the gift in that colour.
+              Guests see these colours after picking this gift, and the preview
+              switches to the colour&apos;s photo.
+            </p>
+            <ColoursEditor
+              value={(g.colours ?? []).join(", ")}
+              onChange={(v) => update(idx, { colours: splitList(v) })}
+              onError={onError}
+            />
+          </details>
+          <details className="rounded-lg border border-sand bg-white/70 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">
+              Name position for this gift
+              <span className="ml-2 text-xs font-normal text-mocha">
+                {g.name_x != null ? "custom" : "using event default"}
+              </span>
+            </summary>
+            <GiftPlacementEditor gift={g} defaults={defaults} onChange={(p) => update(idx, p)} />
+          </details>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn-ghost text-sm"
+        onClick={() =>
+          onChange([...value, { name: "", image_url: null, description: null, stock: null }])
+        }
+      >
+        + Add gift option
+      </button>
+    </div>
+  );
+}
+
+function GiftPlacementEditor({
+  gift,
+  defaults,
+  onChange,
+}: {
+  gift: GiftChoice;
+  defaults: GiftPlacementDefaults;
+  onChange: (patch: Partial<GiftChoice>) => void;
+}) {
+  const custom = gift.name_x != null;
+  const x = gift.name_x ?? defaults.x;
+  const y = gift.name_y ?? defaults.y;
+  const size = gift.name_size ?? defaults.size;
+  const rotation = gift.name_rotation ?? defaults.rotation;
+  const firstColourImage =
+    (gift.colours ?? []).map((c) => parseColour(c).imageUrl).find(Boolean) ?? "";
+  // Any edit switches the gift to its own placement, seeded from the current values.
+  const set = (patch: Partial<GiftChoice>) =>
+    onChange({ name_x: x, name_y: y, name_size: size, name_rotation: rotation, ...patch });
+
+  return (
+    <div className="mt-3 space-y-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={custom}
+          onChange={(e) =>
+            e.target.checked
+              ? set({})
+              : onChange({ name_x: null, name_y: null, name_size: null, name_rotation: null })
+          }
+        />
+        Use a custom name position for this gift
+      </label>
+      {custom && (
+        <>
+          <PositionPreview
+            imageUrl={firstColourImage || gift.image_url || ""}
+            fontOption={defaults.fonts[0] || "Modern"}
+            allFonts={defaults.fonts}
+            colour={defaults.colour}
+            x={x}
+            y={y}
+            size={size}
+            rotation={rotation}
+            tiltX={defaults.tiltX}
+            tiltY={defaults.tiltY}
+            onChangeXY={(nx, ny) => set({ name_x: Math.round(nx), name_y: Math.round(ny) })}
+          />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <SliderField label={`X: ${x}%`} min={0} max={100} value={x} onChange={(v) => set({ name_x: v })} />
+            <SliderField label={`Y: ${y}%`} min={0} max={100} value={y} onChange={(v) => set({ name_y: v })} />
+            <SliderField label={`Size: ${size}px`} min={10} max={120} value={size} onChange={(v) => set({ name_size: v })} />
+            <SliderField label={`Rotation: ${rotation}°`} min={-180} max={180} value={rotation} onChange={(v) => set({ name_rotation: v })} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---------- Colours editor ----------
 
 function ColoursEditor({
@@ -1838,6 +2148,11 @@ const BUILTIN_FONTS = [
   "Jonnie Walker",
   "Luxury Modish",
   "Silkscreen",
+  "Brittany Signature",
+  "Snell Roundhand",
+  "Snell Roundhand Bold",
+  "Snell Roundhand Black",
+  "Futura Book",
 ];
 
 type FontRow = {

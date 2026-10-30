@@ -7,6 +7,7 @@ import {
   supabase,
   type EmbossEvent,
   type EventTemplate,
+  type GiftChoice,
   type Order,
 } from "@/lib/supabase";
 import {
@@ -55,6 +56,10 @@ export default function GuestEventPage() {
   // Gift items the guest has chosen to have engraved (subset of
   // tpl.gift_items). Only relevant when the event has 2+ gift items.
   const [giftItemsSelected, setGiftItemsSelected] = useState<string[]>([]);
+  // Gift the guest picked on the gift-choice step (tpl.gift_choice_enabled).
+  const [chosenGift, setChosenGift] = useState<string | null>(null);
+  const [giftChoiceDone, setGiftChoiceDone] = useState(false);
+  const [giftUsage, setGiftUsage] = useState<Record<string, number>>({});
   // Live tally of orders per colour name (status != cancelled), used to disable
   // colours that have hit their stock cap.
   const [colourUsage, setColourUsage] = useState<Record<string, number>>({});
@@ -93,8 +98,8 @@ export default function GuestEventPage() {
   }, [eventId]);
 
   const fonts = (tpl?.available_fonts as string[] | null) ?? DEFAULT_FONTS;
-  const colours = (tpl?.available_colours as string[] | null) ?? [];
-  const maxLen = tpl?.max_name_length ?? 20;
+  const eventColours = (tpl?.available_colours as string[] | null) ?? [];
+  const eventMaxLen = tpl?.max_name_length ?? 20;
   // When enabled, the same engraving name is rendered at a second position
   // on the product (e.g. front + back, or two slots on a luggage tag) using
   // the preview_name2_* placement/style fields.
@@ -102,6 +107,35 @@ export default function GuestEventPage() {
   const lettersOnly = !!tpl?.name_letters_only;
   const giftItems = (tpl?.gift_items as string[] | null) ?? [];
   const hasMultipleGifts = giftItems.length >= 2;
+  const giftChoices = useMemo(
+    () =>
+      ((tpl?.gift_choices as GiftChoice[] | null) ?? []).filter((g) => g?.name),
+    [tpl?.gift_choices]
+  );
+  const giftChoiceEnabled = !!tpl?.gift_choice_enabled && giftChoices.length > 0;
+  const chosenGiftObj = giftChoices.find((g) => g.name === chosenGift) ?? null;
+  const maxLen = chosenGiftObj?.max_name_length ?? eventMaxLen;
+
+  // Switching to a gift with a shorter limit trims the name already typed.
+  useEffect(() => {
+    setName((prev) => {
+      let next = prev;
+      while (next.length > 0 && sanitizeName(next).length > maxLen) next = next.slice(0, -1);
+      return next;
+    });
+  }, [maxLen]);
+  // A chosen gift with its own colours replaces the event colours; its stock
+  // is tracked separately per gift.
+  const giftHasColours = !!chosenGiftObj?.colours?.length;
+  const colours = giftHasColours ? chosenGiftObj!.colours! : eventColours;
+  const colourUsageKey = (colourName: string) =>
+    giftHasColours ? `${chosenGiftObj!.name}::${colourName}` : colourName;
+  const placement = {
+    x: chosenGiftObj?.name_x ?? tpl?.preview_name_x ?? 50,
+    y: chosenGiftObj?.name_y ?? tpl?.preview_name_y ?? 50,
+    size: chosenGiftObj?.name_size ?? tpl?.preview_name_size ?? 32,
+    rotation: chosenGiftObj?.name_rotation ?? tpl?.preview_name_rotation ?? 0,
+  };
 
   // When the gift step first opens, default to all items selected.
   useEffect(() => {
@@ -119,17 +153,28 @@ export default function GuestEventPage() {
     async function refresh() {
       const { data } = await supabase
         .from("orders")
-        .select("selected_colour,status")
+        .select(giftChoiceEnabled ? "selected_colour,chosen_gift,status" : "selected_colour,status")
         .eq("event_id", eventId)
         .neq("status", "cancelled");
       if (!alive) return;
       const map: Record<string, number> = {};
-      for (const row of (data as { selected_colour: string | null }[]) ?? []) {
+      const giftMap: Record<string, number> = {};
+      const rows = (data ?? []) as unknown as {
+        selected_colour: string | null;
+        chosen_gift?: string | null;
+      }[];
+      for (const row of rows) {
+        if (row.chosen_gift) giftMap[row.chosen_gift] = (giftMap[row.chosen_gift] ?? 0) + 1;
         if (!row.selected_colour) continue;
         const key = parseColour(row.selected_colour).name;
         map[key] = (map[key] ?? 0) + 1;
+        if (row.chosen_gift) {
+          const giftKey = `${row.chosen_gift}::${key}`;
+          map[giftKey] = (map[giftKey] ?? 0) + 1;
+        }
       }
       setColourUsage(map);
+      setGiftUsage(giftMap);
     }
     refresh();
     const channel = supabase
@@ -144,21 +189,27 @@ export default function GuestEventPage() {
       alive = false;
       supabase.removeChannel(channel);
     };
-  }, [eventId]);
+  }, [eventId, giftChoiceEnabled]);
+
+  function remainingForGift(g: GiftChoice): number | null {
+    if (g.stock == null) return null;
+    return Math.max(0, g.stock - (giftUsage[g.name] ?? 0));
+  }
 
   function remainingForColour(c: string): number | null {
     const p = parseColour(c);
     if (p.stock == null) return null;
-    const used = colourUsage[p.name] ?? 0;
+    const used = colourUsage[colourUsageKey(p.name)] ?? 0;
     return Math.max(0, p.stock - used);
   }
 
-  // If the currently-selected colour just went out of stock, switch to the
-  // first available one (or clear it).
+  // If the currently-selected colour just went out of stock, or isn't offered
+  // for the newly chosen gift, switch to the first available one (or clear it).
   useEffect(() => {
-    if (!colour) return;
-    const remaining = remainingForColour(colour);
-    if (remaining !== null && remaining <= 0) {
+    const remaining = colour ? remainingForColour(colour) : null;
+    const valid =
+      colours.includes(colour) && (remaining === null || remaining > 0);
+    if (!valid && (colour || colours.length > 0)) {
       const firstAvail = colours.find((c) => {
         const r = remainingForColour(c);
         return r === null || r > 0;
@@ -166,14 +217,19 @@ export default function GuestEventPage() {
       setColour(firstAvail ?? "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colourUsage]);
+  }, [colourUsage, chosenGift, tpl?.id]);
 
   const cleanName = useMemo(() => sanitizeName(name), [name]);
   const tooLong = cleanName.length > maxLen;
   const containsEmoji = hasEmoji(name);
   const containsDigitOrSymbol = lettersOnly && /[^\p{L}\p{M} ]/u.test(cleanName);
   const canSubmit =
-    cleanName.length > 0 && !tooLong && !containsEmoji && !containsDigitOrSymbol && !submitting;
+    cleanName.length > 0 &&
+    !tooLong &&
+    !containsEmoji &&
+    !containsDigitOrSymbol &&
+    (!giftChoiceEnabled || !!chosenGift) &&
+    !submitting;
 
   async function submit() {
     setSubmitting(true);
@@ -218,6 +274,7 @@ export default function GuestEventPage() {
           gift_received: giftReceivedValue,
           gift_items_selected: giftItemsToSave,
           notes: giftNote,
+          ...(giftChoiceEnabled ? { chosen_gift: chosenGift } : {}),
         })
         .select("*")
         .single();
@@ -379,6 +436,111 @@ export default function GuestEventPage() {
     );
   }
 
+  // Optional gift-choice step — guest picks which gift they want (photo grid)
+  // before typing their name and choosing font / colour.
+  if (started && !submitted && giftChoiceEnabled && !giftChoiceDone) {
+    const chosenRemaining = chosenGiftObj ? remainingForGift(chosenGiftObj) : null;
+    const canContinueGift =
+      !!chosenGiftObj && (chosenRemaining === null || chosenRemaining > 0);
+    const n = giftChoices.length;
+    // Full class strings so Tailwind keeps them. Portrait stacks big cards;
+    // landscape spreads them across.
+    const gridCols =
+      n <= 1
+        ? "grid-cols-1"
+        : n === 2
+        ? "grid-cols-1 landscape:grid-cols-2"
+        : n === 3
+        ? "grid-cols-1 landscape:grid-cols-3"
+        : n === 4
+        ? "grid-cols-2"
+        : n <= 6
+        ? "grid-cols-2 landscape:grid-cols-3"
+        : "grid-cols-2 landscape:grid-cols-4";
+    return (
+      <main className="h-[100dvh] flex flex-col p-3 md:p-5 overflow-hidden">
+        <header className="text-center shrink-0 mb-3 md:mb-4">
+          <p className={`text-[10px] tracking-[0.5em] text-mocha mb-1 ${isRedefineEvent(event.event_name) ? "" : "uppercase"}`}>
+            {event.event_name}
+          </p>
+          <h1 className="font-serif text-3xl md:text-5xl leading-tight">
+            Choose your gift
+          </h1>
+        </header>
+
+        <div
+          className={`grid ${gridCols} auto-rows-[minmax(220px,1fr)] gap-3 md:gap-4 flex-1 min-h-0 overflow-y-auto`}
+        >
+          {giftChoices.map((g) => {
+            const remaining = remainingForGift(g);
+            const outOfStock = remaining !== null && remaining <= 0;
+            const active = chosenGift === g.name;
+            return (
+              <button
+                key={g.name}
+                type="button"
+                disabled={outOfStock}
+                onClick={() => !outOfStock && setChosenGift(g.name)}
+                className={`relative flex flex-col h-full min-h-0 text-left rounded-3xl border-4 overflow-hidden bg-white transition-all duration-150 select-none active:scale-[0.99] ${
+                  active
+                    ? "border-gold shadow-card"
+                    : "border-sand hover:border-mocha/30"
+                } ${outOfStock ? "cursor-not-allowed opacity-50 grayscale" : ""}`}
+              >
+                <div className="relative w-full flex-1 min-h-0 bg-ivory">
+                  {g.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.image_url}
+                      alt={g.name}
+                      className="absolute inset-0 w-full h-full object-contain p-2"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-7xl">
+                      🎁
+                    </div>
+                  )}
+                  {active && (
+                    <span className="absolute top-4 right-4 w-11 h-11 rounded-full bg-gold flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 10 10" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M1.5 5l2.5 2.5 4.5-4" />
+                      </svg>
+                    </span>
+                  )}
+                  {outOfStock && (
+                    <span className="absolute inset-x-0 bottom-0 bg-ink/80 text-ivory text-sm font-bold uppercase tracking-widest text-center py-2">
+                      Out of stock
+                    </span>
+                  )}
+                </div>
+                <div className={`shrink-0 px-4 py-3 md:px-5 md:py-4 text-center ${active ? "bg-champagne/40" : ""}`}>
+                  <p className="font-serif text-ink text-2xl md:text-3xl leading-tight">
+                    {g.name}
+                  </p>
+                  {g.description && (
+                    <p className="text-sm md:text-base text-mocha mt-1 leading-snug">
+                      {g.description}
+                    </p>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="shrink-0 pt-3 md:pt-4 max-w-2xl w-full mx-auto">
+          <button
+            className="btn-primary w-full text-xl py-5 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!canContinueGift}
+            onClick={() => canContinueGift && setGiftChoiceDone(true)}
+          >
+            {chosenGiftObj ? `Continue with ${chosenGiftObj.name}` : "Tap a gift to continue"}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   // Optional door-gift dropoff step — informational screen shown after the
   // welcome and before the personalization form. Guests are told to drop off
   // their door gift with the crew after personalizing. When the event has
@@ -482,6 +644,8 @@ export default function GuestEventPage() {
           setGuestIdDone(false);
           setGiftAnswer(null);
           setGiftItemsSelected(hasMultipleGifts ? giftItems : []);
+          setChosenGift(null);
+          setGiftChoiceDone(false);
           setStarted(false);
         }}
       />
@@ -509,16 +673,17 @@ export default function GuestEventPage() {
           <PreviewCanvas
             imageUrl={
               (colour && parseColour(colour).imageUrl) ||
+              chosenGiftObj?.image_url ||
               tpl?.product_image_url ||
               null
             }
             name={cleanName || "Your Name"}
             font={font}
-            x={tpl?.preview_name_x ?? 50}
-            y={tpl?.preview_name_y ?? 50}
-            size={tpl?.preview_name_size ?? 32}
+            x={placement.x}
+            y={placement.y}
+            size={placement.size}
             colour={tpl?.preview_name_colour ?? "#111111"}
-            rotation={tpl?.preview_name_rotation ?? 0}
+            rotation={placement.rotation}
             tiltX={tpl?.preview_name_tilt_x ?? 0}
             tiltY={tpl?.preview_name_tilt_y ?? 0}
             secondary={
@@ -537,10 +702,23 @@ export default function GuestEventPage() {
                 : null
             }
           />
-          {event.product_name && (
+          {giftChoiceEnabled && chosenGiftObj ? (
             <p className="text-center text-sm font-medium text-mocha mt-3">
-              {event.product_name}
+              {chosenGiftObj.name}
+              <button
+                type="button"
+                className="ml-2 text-xs underline text-mocha/70 hover:text-ink"
+                onClick={() => setGiftChoiceDone(false)}
+              >
+                Change gift
+              </button>
             </p>
+          ) : (
+            event.product_name && (
+              <p className="text-center text-sm font-medium text-mocha mt-3">
+                {event.product_name}
+              </p>
+            )
           )}
           <p className="text-center text-[11px] text-mocha/60 mt-1.5">
             Maximum {maxLen} characters
@@ -725,6 +903,9 @@ export default function GuestEventPage() {
               >
                 {cleanName}
               </p>
+              {chosenGiftObj && (
+                <p className="text-xs text-mocha mt-3">on {chosenGiftObj.name}</p>
+              )}
             </div>
             <div className="flex gap-3">
               <button
@@ -1038,6 +1219,9 @@ function ConfirmationScreen({
             <p className="font-serif text-2xl md:text-3xl text-ink leading-tight">
               {submitted.guest_name}
             </p>
+            {submitted.chosen_gift && (
+              <p className="text-sm text-mocha mt-1">{submitted.chosen_gift}</p>
+            )}
             <p className="text-xs text-mocha/60 mt-1">Order submitted</p>
           </div>
         </div>

@@ -70,6 +70,32 @@ export const BUILTIN_FONT_DEFS: BuiltinFontDef[] = [
     // Commercial display font. Falls back to a high-contrast serif.
     family: "'Luxury Modish', 'Didot', 'Bodoni 72', serif",
   },
+  // Self-hosted fonts — @font-face declarations live in globals.css.
+  {
+    match: "brittany signature",
+    display: "Brittany Signature",
+    family: "'Brittany Signature', 'Brush Script MT', cursive",
+  },
+  {
+    match: "snell roundhand",
+    display: "Snell Roundhand",
+    family: "'Snell Roundhand Web', 'Snell Roundhand', cursive",
+  },
+  {
+    match: "snell roundhand bold",
+    display: "Snell Roundhand Bold",
+    family: "'Snell Roundhand Bold Web', 'Snell Roundhand', cursive",
+  },
+  {
+    match: "snell roundhand black",
+    display: "Snell Roundhand Black",
+    family: "'Snell Roundhand Black Web', 'Snell Roundhand', cursive",
+  },
+  {
+    match: "futura book",
+    display: "Futura Book",
+    family: "'Futura Book Web', Futura, 'Century Gothic', sans-serif",
+  },
   {
     match: "silkscreen",
     display: "Silkscreen",

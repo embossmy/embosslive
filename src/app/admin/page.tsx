@@ -435,6 +435,9 @@ export default function AdminDashboard() {
               {template?.guest_id_required && (
                 <th className="px-4 py-3 font-semibold">Guest ID</th>
               )}
+              {template?.gift_choice_enabled && (
+                <th className="px-4 py-3 font-semibold">Chosen gift</th>
+              )}
               <th className="px-4 py-3 font-semibold">Font</th>
               <th className="px-4 py-3 font-semibold">Colour</th>
               <th className="px-4 py-3 font-semibold">Status</th>
@@ -449,7 +452,7 @@ export default function AdminDashboard() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8 + (template?.gift_required ? 1 : 0) + (template?.guest_id_required ? 1 : 0)} className="text-center py-16 text-mocha">
+                <td colSpan={8 + (template?.gift_required ? 1 : 0) + (template?.guest_id_required ? 1 : 0) + (template?.gift_choice_enabled ? 1 : 0)} className="text-center py-16 text-mocha">
                   <p className="font-serif text-xl mb-1">No orders</p>
                   <p className="text-sm text-mocha/60">Matching orders will appear here.</p>
                 </td>
@@ -468,6 +471,11 @@ export default function AdminDashboard() {
                 </td>
                 {template?.guest_id_required && (
                   <td className="px-4 py-3 font-semibold tabular-nums">{o.guest_id ?? "—"}</td>
+                )}
+                {template?.gift_choice_enabled && (
+                  <td className="px-4 py-3 font-semibold text-ink">
+                    {o.chosen_gift ?? <span className="text-mocha/40">—</span>}
+                  </td>
                 )}
                 <td className="px-4 py-3">
                   {o.selected_font ? (
