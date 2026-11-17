@@ -9,8 +9,14 @@ import {
   type EventTemplate,
   type GiftChoice,
   type Order,
+  type TextFinish,
 } from "@/lib/supabase";
 import {
+  embossTextStyle,
+  finishLabel,
+  finishSwatchStyle,
+  finishTextStyle,
+  parseEmbossStyle,
   fontClassFor,
   fontDisplayName,
   fontStyleFor,
@@ -60,6 +66,8 @@ export default function GuestEventPage() {
   const [chosenGift, setChosenGift] = useState<string | null>(null);
   const [giftChoiceDone, setGiftChoiceDone] = useState(false);
   const [giftUsage, setGiftUsage] = useState<Record<string, number>>({});
+  // Engraving colour / finish the guest picked (tpl.text_finishes).
+  const [textFinish, setTextFinish] = useState<string | null>(null);
   // Live tally of orders per colour name (status != cancelled), used to disable
   // colours that have hit their stock cap.
   const [colourUsage, setColourUsage] = useState<Record<string, number>>({});
@@ -113,6 +121,23 @@ export default function GuestEventPage() {
     [tpl?.gift_choices]
   );
   const giftChoiceEnabled = !!tpl?.gift_choice_enabled && giftChoices.length > 0;
+  // Colour / finish options for the engraved name. One option is applied
+  // automatically; 2+ show a picker on the form.
+  const textFinishes = useMemo(
+    () =>
+      ((tpl?.text_finishes as TextFinish[] | null) ?? []).filter((f) =>
+        f?.value?.trim()
+      ),
+    [tpl?.text_finishes]
+  );
+  const hasFinishPicker = textFinishes.length >= 2;
+  const activeFinish =
+    (textFinish && textFinishes.some((f) => f.value === textFinish)
+      ? textFinish
+      : null) ??
+    textFinishes[0]?.value ??
+    tpl?.preview_name_colour ??
+    "#111111";
   const chosenGiftObj = giftChoices.find((g) => g.name === chosenGift) ?? null;
   const maxLen = chosenGiftObj?.max_name_length ?? eventMaxLen;
 
@@ -274,6 +299,7 @@ export default function GuestEventPage() {
           gift_received: giftReceivedValue,
           gift_items_selected: giftItemsToSave,
           notes: giftNote,
+          ...(textFinishes.length ? { text_finish: activeFinish } : {}),
           ...(giftChoiceEnabled ? { chosen_gift: chosenGift } : {}),
         })
         .select("*")
@@ -637,6 +663,7 @@ export default function GuestEventPage() {
           setGiftItemsSelected(hasMultipleGifts ? giftItems : []);
           setChosenGift(null);
           setGiftChoiceDone(false);
+          setTextFinish(null);
           setStarted(false);
         }}
       />
@@ -673,7 +700,7 @@ export default function GuestEventPage() {
             x={placement.x}
             y={placement.y}
             size={placement.size}
-            colour={tpl?.preview_name_colour ?? "#111111"}
+            colour={activeFinish}
             rotation={placement.rotation}
             tiltX={tpl?.preview_name_tilt_x ?? 0}
             tiltY={tpl?.preview_name_tilt_y ?? 0}
@@ -861,6 +888,51 @@ export default function GuestEventPage() {
             </div>
           )}
 
+          {hasFinishPicker && (
+            <div className="mt-6">
+              <p className="label">Text Colour / Finish</p>
+              <div className="flex flex-wrap gap-3">
+                {textFinishes.map((f) => {
+                  const isActive = activeFinish === f.value;
+                  return (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => setTextFinish(f.value)}
+                      className={`relative flex flex-col items-center justify-center rounded-xl border-2 px-3 pt-5 pb-3 transition-all duration-150 select-none flex-1 min-w-[160px] ${
+                        isActive
+                          ? "border-gold bg-champagne/30 shadow-sm"
+                          : "border-sand bg-white hover:border-mocha/30 hover:bg-champagne/10"
+                      }`}
+                    >
+                      {isActive && (
+                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-gold flex items-center justify-center">
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M1.5 5l2.5 2.5 4.5-4" />
+                          </svg>
+                        </span>
+                      )}
+                      <span
+                        className="w-full rounded-lg flex items-center justify-center overflow-hidden px-2"
+                        style={finishSwatchStyle(tpl?.finish_swatch_bg, tpl?.finish_swatch_image_url)}
+                      >
+                        <span
+                          className={`block text-2xl md:text-3xl leading-tight whitespace-nowrap overflow-hidden text-ellipsis max-w-full ${fontClassFor(font)}`}
+                          style={{ ...fontStyleFor(font), ...finishTextStyle(f.value) }}
+                        >
+                          {cleanName || "Your Name"}
+                        </span>
+                      </span>
+                      <span className="block text-[10px] uppercase tracking-[0.1em] text-mocha/60 mt-2 font-sans">
+                        {f.label.trim() || finishLabel(f.value)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <button
             disabled={!canSubmit}
             onClick={() => setShowConfirm(true)}
@@ -888,7 +960,7 @@ export default function GuestEventPage() {
               <p
                 className={`${fontClassFor(font)} text-4xl leading-tight`}
                 style={{
-                  color: tpl?.preview_name_colour ?? "#111",
+                  ...finishTextStyle(activeFinish),
                   ...fontStyleFor(font),
                 }}
               >
@@ -919,70 +991,6 @@ export default function GuestEventPage() {
       <Footer />
     </main>
   );
-}
-
-// Returns CSS style for the three leather finishing treatments.
-// The admin sets preview_name_colour to one of these keywords.
-type EmbossStyle = "deboss" | "gold-foil" | "silver-foil" | null;
-
-function parseEmbossStyle(colour: string): EmbossStyle {
-  const k = colour.trim().toLowerCase();
-  if (k === "deboss") return "deboss";
-  if (k === "gold-foil" || k === "gold foil") return "gold-foil";
-  if (k === "silver-foil" || k === "silver foil") return "silver-foil";
-  return null;
-}
-
-function embossTextStyle(
-  style: EmbossStyle,
-  placeholder: boolean
-): React.CSSProperties {
-  const opacity = placeholder ? 0.45 : 1;
-  switch (style) {
-    case "deboss":
-      // Pressed-into-leather effect: transparent fill, inset shadow pair
-      // (dark below = pressed depth, light above = raised edge catch).
-      return {
-        color: "transparent",
-        WebkitTextStroke: "0px",
-        textShadow: [
-          "0px 1px 1px rgba(0,0,0,0.55)",   // depth shadow (below)
-          "0px -1px 0px rgba(255,255,255,0.18)", // rim highlight (above)
-        ].join(", "),
-        opacity,
-        // We paint the text as a clipping mask so the shadow shows through.
-        // This is the pure-CSS deboss trick: colour=transparent + text-shadow.
-        WebkitBackgroundClip: "text" as React.CSSProperties["WebkitBackgroundClip"],
-        backgroundImage:
-          "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.0) 100%)",
-        backgroundClip: "text",
-      };
-    case "gold-foil":
-      // Tight specular band mimicking stamped gold foil on leather:
-      // deep warm gold base → narrow bright highlight → back to rich gold.
-      return {
-        color: "transparent",
-        backgroundImage:
-          "linear-gradient(160deg, #7A5C1E 0%, #C9922A 20%, #E8C55A 38%, #FDF3A0 46%, #E8C55A 54%, #B8861F 72%, #7A5C1E 100%)",
-        WebkitBackgroundClip: "text",
-        backgroundClip: "text",
-        filter: "drop-shadow(0px 1.5px 1px rgba(80,50,0,0.6))",
-        opacity,
-      };
-    case "silver-foil":
-      // Cool chrome: dark steel base → sharp white specular → back to steel.
-      return {
-        color: "transparent",
-        backgroundImage:
-          "linear-gradient(160deg, #3A3A3A 0%, #7A7A7A 18%, #C8C8C8 36%, #F5F5F5 46%, #C8C8C8 56%, #707070 74%, #3A3A3A 100%)",
-        WebkitBackgroundClip: "text",
-        backgroundClip: "text",
-        filter: "drop-shadow(0px 1.5px 1px rgba(0,0,0,0.5))",
-        opacity,
-      };
-    default:
-      return {};
-  }
 }
 
 function PreviewCanvas({

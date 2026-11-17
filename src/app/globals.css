@@ -21,6 +21,12 @@
   font-display: swap;
 }
 @font-face {
+  font-family: "Tw Cen MT Web";
+  src: url("/fonts/TwCenMT.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
   font-family: "Futura Book Web";
   src: url("/fonts/FuturaCyrillicBook.ttf") format("truetype");
   font-weight: 100 900;

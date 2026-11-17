@@ -14,6 +14,7 @@ import {
   fontClassFor,
   fontDisplayName,
   fontStyleFor,
+  finishLabel,
   formatTime,
   parseColour,
 } from "@/lib/utils";
@@ -180,6 +181,8 @@ export default function AdminDashboard() {
     const minutes = Math.max(0, Math.round(active * mpo));
     return { minutes, active };
   }, [orders, template]);
+
+  const hasFinishes = (template?.text_finishes?.length ?? 0) > 0;
 
   const orderFonts = useMemo(() => {
     const set = new Set<string>();
@@ -440,6 +443,7 @@ export default function AdminDashboard() {
               )}
               <th className="px-4 py-3 font-semibold">Font</th>
               <th className="px-4 py-3 font-semibold">Colour</th>
+              {hasFinishes && <th className="px-4 py-3 font-semibold">Finish</th>}
               <th className="px-4 py-3 font-semibold">Status</th>
               {template?.gift_required && (
                 <th className="px-4 py-3 font-semibold" title="Door gift dropoff">Gift</th>
@@ -452,7 +456,7 @@ export default function AdminDashboard() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8 + (template?.gift_required ? 1 : 0) + (template?.guest_id_required ? 1 : 0) + (template?.gift_choice_enabled ? 1 : 0)} className="text-center py-16 text-mocha">
+                <td colSpan={8 + (template?.gift_required ? 1 : 0) + (template?.guest_id_required ? 1 : 0) + (template?.gift_choice_enabled ? 1 : 0) + (hasFinishes ? 1 : 0)} className="text-center py-16 text-mocha">
                   <p className="font-serif text-xl mb-1">No orders</p>
                   <p className="text-sm text-mocha/60">Matching orders will appear here.</p>
                 </td>
@@ -491,6 +495,14 @@ export default function AdminDashboard() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm text-mocha">{o.selected_colour ? parseColour(o.selected_colour).name : <span className="text-mocha/40">—</span>}</td>
+                {hasFinishes && (
+                  <td className="px-4 py-3 text-sm font-semibold text-ink">
+                    {o.text_finish
+                      ? template?.text_finishes?.find((f) => f.value === o.text_finish)?.label?.trim() ||
+                        finishLabel(o.text_finish)
+                      : <span className="text-mocha/40 font-normal">—</span>}
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   <span
                     className={`badge ${

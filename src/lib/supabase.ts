@@ -107,9 +107,19 @@ export interface EventTemplate {
   name_letters_only: boolean | null;
   guest_id_required: boolean | null;
   hide_qr_after_submit: boolean | null;
+  // Guest-selectable engraving text colour / finish (optional)
+  text_finishes: TextFinish[] | null;
+  finish_swatch_bg: string | null;
+  finish_swatch_image_url: string | null;
   // Guest gift choice step (optional)
   gift_choice_enabled: boolean | null;
   gift_choices: GiftChoice[] | null;
+}
+
+export interface TextFinish {
+  label: string;
+  // Hex colour ("#B8861F") or finish keyword ("gold-foil", "silver-foil", "deboss")
+  value: string;
 }
 
 export interface GiftChoice {
@@ -141,6 +151,7 @@ export interface Order {
   gift_items_selected: string[] | null;
   gift_items_received: string[] | null;
   chosen_gift: string | null;
+  text_finish: string | null;
   selected_font: string | null;
   selected_colour: string | null;
   status: OrderStatus;

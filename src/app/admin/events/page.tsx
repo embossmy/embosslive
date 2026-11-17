@@ -7,10 +7,14 @@ import {
   type EmbossEvent,
   type EventTemplate,
   type GiftChoice,
+  type TextFinish,
 } from "@/lib/supabase";
 import {
   encodeColour,
   encodeFont,
+  finishLabel,
+  finishSwatchStyle,
+  finishTextStyle,
   fontClassFor,
   fontStyleFor,
   nameTransform,
@@ -59,6 +63,10 @@ interface FormState {
   // Door-gift dropoff step
   gift_required: boolean;
   gift_items: string; // comma-separated list, e.g. "Luggage tag, Passport holder"
+  // Guest-selectable engraving colours / finishes
+  text_finishes: TextFinish[];
+  finish_swatch_bg: string;
+  finish_swatch_image_url: string;
   // Guest gift choice step
   gift_choice_enabled: boolean;
   gift_choices: GiftChoice[];
@@ -113,6 +121,9 @@ const empty: FormState = {
   status: "active",
   gift_required: false,
   gift_items: "",
+  text_finishes: [],
+  finish_swatch_bg: "#4A5A50",
+  finish_swatch_image_url: "",
   gift_choice_enabled: false,
   gift_choices: [],
   name2_enabled: false,
@@ -299,6 +310,11 @@ export default function EventsAdminPage() {
       status: (ev.status as "active" | "inactive") ?? "active",
       gift_required: Boolean(t?.gift_required ?? false),
       gift_items: Array.isArray(t?.gift_items) ? (t.gift_items as string[]).join(", ") : "",
+      text_finishes: Array.isArray(t?.text_finishes)
+        ? (t.text_finishes as TextFinish[]).filter((f) => f?.value)
+        : [],
+      finish_swatch_bg: t?.finish_swatch_bg ?? "#4A5A50",
+      finish_swatch_image_url: t?.finish_swatch_image_url ?? "",
       gift_choice_enabled: Boolean(t?.gift_choice_enabled ?? false),
       gift_choices: Array.isArray(t?.gift_choices) ? (t.gift_choices as GiftChoice[]) : [],
       name2_enabled: Boolean(t?.name2_enabled ?? false),
@@ -388,6 +404,11 @@ export default function EventsAdminPage() {
         auto_reset_seconds: form.auto_reset_seconds,
         gift_required: form.gift_required,
         gift_items: splitList(form.gift_items),
+        text_finishes: form.text_finishes
+          .map((f) => ({ label: f.label.trim(), value: f.value.trim() }))
+          .filter((f) => f.value),
+        finish_swatch_bg: form.finish_swatch_bg || "#4A5A50",
+        finish_swatch_image_url: form.finish_swatch_image_url || null,
         gift_choice_enabled: form.gift_choice_enabled,
         gift_choices: form.gift_choices
           .map((g) => ({
@@ -911,9 +932,59 @@ export default function EventsAdminPage() {
                       }
                     />
                   </div>
+                  <FinishQuickPick
+                    value={form.preview_name_colour}
+                    onChange={(v) => setForm({ ...form, preview_name_colour: v })}
+                  />
                   <p className="text-xs text-mocha/60 mt-1">
                     Enter a hex colour (e.g. <code>#3B2A1A</code>) or a finish keyword:{" "}
                     <code>deboss</code>, <code>gold-foil</code>, <code>silver-foil</code>
+                  </p>
+                </Field>
+                <Field label="Let guests choose colour / finish" full>
+                  <TextFinishesEditor
+                    value={form.text_finishes}
+                    onChange={(text_finishes) => setForm((f) => ({ ...f, text_finishes }))}
+                    swatchBg={form.finish_swatch_bg}
+                    swatchImage={form.finish_swatch_image_url}
+                    previewFont={splitList(form.available_fonts)[0] || "Modern"}
+                  />
+                  {form.text_finishes.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-sand bg-white/70 p-3 space-y-3">
+                      <p className="text-sm font-semibold text-ink">Option background</p>
+                      <label className="flex items-center gap-2 text-sm">
+                        <span className="text-mocha">Colour</span>
+                        <input
+                          type="color"
+                          className="h-9 w-12 rounded cursor-pointer border border-sand"
+                          value={/^#[0-9a-fA-F]{6}$/.test(form.finish_swatch_bg) ? form.finish_swatch_bg : "#4A5A50"}
+                          onChange={(e) => setForm((f) => ({ ...f, finish_swatch_bg: e.target.value }))}
+                        />
+                        <input
+                          className="input !py-1.5 !w-28 font-mono text-xs"
+                          value={form.finish_swatch_bg}
+                          onChange={(e) => setForm((f) => ({ ...f, finish_swatch_bg: e.target.value }))}
+                        />
+                      </label>
+                      <div>
+                        <p className="text-[11px] text-mocha mb-1">
+                          Or upload an image (e.g. a close-up of the leather).
+                          Use a <strong>3:1</strong> landscape image, at least{" "}
+                          <strong>900 × 300 px</strong>. It covers the colour above.
+                        </p>
+                        <ImageField
+                          value={form.finish_swatch_image_url}
+                          onChange={(v) => setForm((f) => ({ ...f, finish_swatch_image_url: v }))}
+                          onError={(m) => setMsg(`Error: ${m}`)}
+                          pathPrefix="finish-swatch"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-mocha mt-2">
+                    Optional. Add 2 or more options and guests pick one on the
+                    form; the name preview updates live. Leave empty to always
+                    use the colour / finish above.
                   </p>
                 </Field>
                 <Field label="Max name length">
@@ -1111,6 +1182,10 @@ export default function EventsAdminPage() {
                           }
                         />
                       </div>
+                      <FinishQuickPick
+                        value={form.preview_name2_colour}
+                        onChange={(v) => setForm({ ...form, preview_name2_colour: v })}
+                      />
                       <p className="text-xs text-mocha/60 mt-1">
                         Enter a hex colour or a finish keyword:{" "}
                         <code>deboss</code>, <code>gold-foil</code>, <code>silver-foil</code>
@@ -1566,7 +1641,7 @@ function PositionPreview({
     transform: textTransform,
     transformStyle: "preserve-3d",
     fontSize: `${size}px`,
-    color: colour,
+    ...finishTextStyle(colour),
     ...fontStyleFor(fontOption),
   };
 
@@ -1612,7 +1687,7 @@ function PositionPreview({
               ),
               transformStyle: "preserve-3d",
               fontSize: `${secondary.size}px`,
-              color: secondary.colour,
+              ...finishTextStyle(secondary.colour),
               opacity: 0.65,
               ...fontStyleFor(secondary.fontOption),
             }}
@@ -1760,6 +1835,129 @@ function ImageField({
           />
         )
       )}
+    </div>
+  );
+}
+
+// ---------- Finish quick-pick ----------
+
+const FINISH_OPTIONS = [
+  { value: "gold-foil", label: "Gold foil", bg: "#4A5A50" },
+  { value: "silver-foil", label: "Silver foil", bg: "#4A5A50" },
+  { value: "deboss", label: "Deboss", bg: "#8A6A4E" },
+];
+
+function FinishQuickPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const current = value.trim().toLowerCase().replace(" ", "-");
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {FINISH_OPTIONS.map((f) => (
+        <button
+          key={f.value}
+          type="button"
+          onClick={() => onChange(f.value)}
+          className={`rounded-lg px-3 py-1.5 border-2 transition-colors ${
+            current === f.value ? "border-gold" : "border-transparent hover:border-sand"
+          }`}
+          style={{ backgroundColor: f.bg }}
+          title={`Use ${f.label} finish`}
+        >
+          <span className="font-semibold text-base" style={finishTextStyle(f.value)}>
+            {f.label}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Guest colour / finish options editor ----------
+
+function TextFinishesEditor({
+  value,
+  onChange,
+  swatchBg,
+  swatchImage,
+  previewFont,
+}: {
+  value: TextFinish[];
+  onChange: (next: TextFinish[]) => void;
+  swatchBg: string;
+  swatchImage: string;
+  previewFont: string;
+}) {
+  function update(idx: number, patch: Partial<TextFinish>) {
+    onChange(value.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  }
+  const isHex = (v: string) => /^#[0-9a-fA-F]{3,8}$/.test(v.trim());
+
+  return (
+    <div className="space-y-2">
+      {value.length === 0 && (
+        <p className="text-sm text-mocha italic">
+          No options yet. Guests will not see a colour / finish picker.
+        </p>
+      )}
+      {value.map((f, idx) => (
+        <div
+          key={idx}
+          className="rounded-xl border border-sand bg-ivory/60 p-3 space-y-2"
+        >
+          <div className="flex flex-wrap gap-2 items-center">
+            <span
+              className="w-28 rounded-lg flex items-center justify-center select-none shrink-0 overflow-hidden"
+              style={finishSwatchStyle(swatchBg, swatchImage)}
+              title="Preview"
+            >
+              <span
+                className={`text-xl leading-none whitespace-nowrap ${fontClassFor(previewFont)}`}
+                style={{ ...fontStyleFor(previewFont), ...finishTextStyle(f.value || "#111111") }}
+              >
+                Sarah
+              </span>
+            </span>
+            <input
+              className="input !py-1.5 !w-40"
+              placeholder="Label (e.g. Gold foil)"
+              value={f.label}
+              onChange={(e) => update(idx, { label: e.target.value })}
+            />
+            <input
+              className="input !py-1.5 flex-1 min-w-[9rem] font-mono text-xs"
+              placeholder="gold-foil · #B8861F"
+              value={f.value}
+              onChange={(e) => update(idx, { value: e.target.value })}
+            />
+            <input
+              type="color"
+              className="h-9 w-10 rounded cursor-pointer border border-sand shrink-0"
+              value={isHex(f.value) ? f.value.trim() : "#3B2A1A"}
+              onChange={(e) => update(idx, { value: e.target.value })}
+              title="Pick a colour"
+            />
+            <button
+              type="button"
+              className="btn-ghost !py-1 !px-3 text-xs"
+              onClick={() => onChange(value.filter((_, i) => i !== idx))}
+            >
+              Remove
+            </button>
+          </div>
+          <FinishQuickPick
+            value={f.value}
+            onChange={(v) =>
+              update(idx, { value: v, label: f.label.trim() ? f.label : finishLabel(v) })
+            }
+          />
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn-ghost text-sm"
+        onClick={() => onChange([...value, { label: "", value: "" }])}
+      >
+        + Add colour / finish
+      </button>
     </div>
   );
 }
@@ -2153,6 +2351,7 @@ const BUILTIN_FONTS = [
   "Snell Roundhand Bold",
   "Snell Roundhand Black",
   "Futura Book",
+  "Tw Cen MT",
 ];
 
 type FontRow = {

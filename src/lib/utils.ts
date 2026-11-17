@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 // Strip emojis and most non-printable symbols. Keeps letters (incl. unicode), numbers, spaces, and common punctuation.
 export function sanitizeName(input: string): string {
   // Remove emoji / pictographs / symbols
@@ -90,6 +92,11 @@ export const BUILTIN_FONT_DEFS: BuiltinFontDef[] = [
     match: "snell roundhand black",
     display: "Snell Roundhand Black",
     family: "'Snell Roundhand Black Web', 'Snell Roundhand', cursive",
+  },
+  {
+    match: "tw cen mt",
+    display: "Tw Cen MT",
+    family: "'Tw Cen MT Web', 'Tw Cen MT', 'Century Gothic', sans-serif",
   },
   {
     match: "futura book",
@@ -377,6 +384,112 @@ export function startButtonStyle(opts: {
       ...(fontInline?.fontStyle ? { fontStyle: fontInline.fontStyle } : {}),
     },
   };
+}
+
+// ---------- Leather finishing treatments ----------
+// The admin sets preview_name_colour to a hex colour or one of these keywords.
+export type EmbossStyle = "deboss" | "gold-foil" | "silver-foil" | null;
+
+export function parseEmbossStyle(colour: string | null | undefined): EmbossStyle {
+  const k = (colour ?? "").trim().toLowerCase();
+  if (k === "deboss") return "deboss";
+  if (k === "gold-foil" || k === "gold foil") return "gold-foil";
+  if (k === "silver-foil" || k === "silver foil") return "silver-foil";
+  return null;
+}
+
+export function embossTextStyle(style: EmbossStyle, placeholder = false): CSSProperties {
+  // Only set opacity for placeholders so callers can control it otherwise.
+  const opacity = placeholder ? 0.45 : undefined;
+  switch (style) {
+    case "deboss":
+      // Pressed-into-leather effect: transparent fill, inset shadow pair
+      // (dark below = pressed depth, light above = raised edge catch).
+      return {
+        color: "transparent",
+        WebkitTextStroke: "0px",
+        textShadow: [
+          "0px 1px 1px rgba(0,0,0,0.55)",
+          "0px -1px 0px rgba(255,255,255,0.18)",
+        ].join(", "),
+        opacity,
+        WebkitBackgroundClip: "text",
+        backgroundImage:
+          "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.0) 100%)",
+        backgroundClip: "text",
+      };
+    case "gold-foil":
+      // Hot-stamped gold foil on pebbled leather: a bright, near-flat yellow
+      // gold (foil reflects evenly, no chrome-like banding) with a soft sheen
+      // toward the top and slightly deeper gold at the bottom. The drop-shadows
+      // sell the stamp being pressed into the leather: a hairline dark edge
+      // above (groove wall in shadow), a faint light lip below, and a tight
+      // warm outline so the letters stay crisp on light leathers.
+      return {
+        color: "transparent",
+        backgroundImage: [
+          "radial-gradient(120% 80% at 35% 15%, rgba(255,250,215,0.55) 0%, rgba(255,250,215,0) 55%)",
+          "linear-gradient(180deg, #F7E48A 0%, #EED260 30%, #E4BE45 65%, #D2A632 100%)",
+        ].join(", "),
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        filter: [
+          "drop-shadow(0px -0.5px 0px rgba(70,45,0,0.45))",
+          "drop-shadow(0px 0.75px 0px rgba(255,255,255,0.28))",
+          "drop-shadow(0px 0px 0.6px rgba(110,75,5,0.55))",
+        ].join(" "),
+        opacity,
+      };
+    case "silver-foil":
+      return {
+        color: "transparent",
+        backgroundImage:
+          "linear-gradient(160deg, #3A3A3A 0%, #7A7A7A 18%, #C8C8C8 36%, #F5F5F5 46%, #C8C8C8 56%, #707070 74%, #3A3A3A 100%)",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        filter: "drop-shadow(0px 1.5px 1px rgba(0,0,0,0.5))",
+        opacity,
+      };
+    default:
+      return {};
+  }
+}
+
+// Friendly label for a finish/colour value (e.g. "gold-foil" → "Gold foil").
+export function finishLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const style = parseEmbossStyle(value);
+  if (style === "gold-foil") return "Gold foil";
+  if (style === "silver-foil") return "Silver foil";
+  if (style === "deboss") return "Deboss";
+  return value.trim();
+}
+
+// Background for the colour / finish swatches (guest picker + admin preview).
+// The image, if set, covers the colour; the colour shows while it loads.
+export const FINISH_SWATCH_ASPECT = "3 / 1";
+export function finishSwatchStyle(
+  bg: string | null | undefined,
+  imageUrl: string | null | undefined
+): CSSProperties {
+  return {
+    aspectRatio: FINISH_SWATCH_ASPECT,
+    backgroundColor: bg || "#4A5A50",
+    ...(imageUrl
+      ? {
+          backgroundImage: `url("${imageUrl}")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }
+      : {}),
+  };
+}
+
+// Full text style for a colour/finish value: hex colours pass through,
+// finish keywords get the matching treatment.
+export function finishTextStyle(colour: string | null | undefined, placeholder = false): CSSProperties {
+  const style = parseEmbossStyle(colour);
+  return style ? embossTextStyle(style, placeholder) : { color: colour || "#111111" };
 }
 
 export function pad3(n: number): string {
